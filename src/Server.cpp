@@ -6,6 +6,7 @@
 #include <string>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <thread>
 #include <unistd.h>
 
 int main(int argc, char **argv) {
@@ -45,31 +46,37 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  auto handleConnection = [](int cfd) -> void {
+    char buffer[1024];
+    while (true) {
+      ssize_t bytes_received = recv(cfd, buffer, sizeof(buffer) - 1, 0);
+
+      if (bytes_received <= 0) {
+        std::cout << "Client disconnected\n";
+        break;
+      }
+
+      buffer[bytes_received] = '\0';
+      std::cout << "Received: " << buffer << std::endl;
+
+      std::string response = "+PONG\r\n";
+      send(cfd, response.c_str(), response.size(), 0);
+    }
+
+    close(cfd);
+  };
   struct sockaddr_in client_addr;
   int client_addr_len = sizeof(client_addr);
   std::cout << "Waiting for a client to connect...\n";
 
-  int client_fd = accept(server_fd, (struct sockaddr *)&client_addr,
-                         (socklen_t *)&client_addr_len);
-  std::cout << "Client connected\n";
-
-  char buffer[1024];
   while (true) {
-    ssize_t bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
-
-    if (bytes_received <= 0) {
-      std::cout << "Client disconnected\n";
-      break;
-    }
-
-    buffer[bytes_received] = '\0';
-    std::cout << "Received: " << buffer << std::endl;
-
-    std::string response = "+PONG\r\n";
-    send(client_fd, response.c_str(), response.size(), 0);
+    int client_fd = accept(server_fd, (struct sockaddr *)&client_addr,
+                           (socklen_t *)&client_addr_len);
+    std::cout << "Client connected\n";
+    std::thread cthread(handleConnection, client_fd);
+    cthread.detach();
   }
 
-  close(client_fd);
   close(server_fd);
 
   return 0;
