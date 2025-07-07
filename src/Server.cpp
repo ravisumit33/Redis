@@ -53,10 +53,23 @@ int main(int argc, char **argv) {
                          (socklen_t *)&client_addr_len);
   std::cout << "Client connected\n";
 
-  std::string response = "+PONG\r\n";
-  send(client_fd, response.c_str(), response.size(), 0);
-  close(client_fd);
+  char buffer[1024];
+  while (true) {
+    ssize_t bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
 
+    if (bytes_received <= 0) {
+      std::cout << "Client disconnected\n";
+      break;
+    }
+
+    buffer[bytes_received] = '\0';
+    std::cout << "Received: " << buffer << std::endl;
+
+    std::string response = "+PONG\r\n";
+    send(client_fd, response.c_str(), response.size(), 0);
+  }
+
+  close(client_fd);
   close(server_fd);
 
   return 0;
