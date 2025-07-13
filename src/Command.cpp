@@ -1,6 +1,8 @@
 #include "Command.hpp"
 #include "RedisStore.hpp"
 #include "RespType.hpp"
+#include <chrono>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,19 +37,37 @@ CommandRegistrar<SetCommand> SetCommand::registrar("SET");
 
 std::unique_ptr<RespType>
 SetCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
-  if (args.size() != 2) {
+  if (args.size() != 4 && args.size() != 2) {
     return std::make_unique<RespError>("Unexpected number of args");
   }
 
-  if (args[0]->getType() != RespType::BULK_STRING ||
-      args[1]->getType() != RespType::BULK_STRING) {
-    return std::make_unique<RespError>("Unexpected arguments type");
+  size_t nargs = args.size();
+
+  for (int i = 0; i < nargs; ++i) {
+    if (args[i]->getType() != RespType::BULK_STRING) {
+      return std::make_unique<RespError>("Unexpected arguments type");
+    }
   }
 
   auto key = static_cast<RespBulkString &>(*args[0]).getValue();
   auto value = static_cast<RespBulkString &>(*args[1]).getValue();
 
-  RedisStore::instance().set(key, value);
+  std::optional<std::chrono::milliseconds> expiry = std::nullopt;
+  if (nargs == 4) {
+    auto expiryArgName = static_cast<RespBulkString &>(*args[2]).getValue();
+    if (expiryArgName != "px") {
+      return std::make_unique<RespError>("Unexpected syntax");
+    }
+    try {
+      auto expiryDelta =
+          std::stoul(static_cast<RespBulkString &>(*args[3]).getValue());
+      expiry = std::chrono::milliseconds(expiryDelta);
+    } catch (const std::exception &ex) {
+      std::cerr << "Unexpected expiry time: " << ex.what() << std::endl;
+    }
+  }
+
+  RedisStore::instance().set(key, value, expiry);
 
   return std::make_unique<RespString>("OK");
 }
