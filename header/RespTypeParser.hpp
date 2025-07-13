@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Registrar.hpp"
+#include "Registry.hpp"
 #include "RespType.hpp"
 #include <cstddef>
 #include <istream>
@@ -13,6 +14,11 @@ public:
   virtual RespType::Type getType() const = 0;
 };
 
+using RespParserRegistry = Registry<char, RespTypeParser>;
+
+template <typename T>
+using RespParserRegistrar = Registrar<char, RespTypeParser, T>;
+
 class RespStringParser : public RespTypeParser {
 public:
   virtual std::unique_ptr<RespType> parse(std::istream &in) override;
@@ -20,7 +26,7 @@ public:
   virtual RespType::Type getType() const override { return RespType::STRING; }
 
 private:
-  static Registrar<char, RespTypeParser, RespStringParser> registrar;
+  static RespParserRegistrar<RespStringParser> registrar;
 };
 
 class RespIntParser : public RespTypeParser {
@@ -29,7 +35,7 @@ public:
   virtual RespType::Type getType() const override { return RespType::INTEGER; }
 
 private:
-  static Registrar<char, RespTypeParser, RespIntParser> registrar;
+  static RespParserRegistrar<RespIntParser> registrar;
 };
 
 class RespArrayParser : public RespTypeParser {
@@ -38,7 +44,7 @@ public:
   virtual RespType::Type getType() const override { return RespType::ARRAY; }
 
 private:
-  static Registrar<char, RespTypeParser, RespArrayParser> registrar;
+  static RespParserRegistrar<RespArrayParser> registrar;
 };
 
 class RespBulkStringParser : public RespTypeParser {
@@ -49,7 +55,7 @@ public:
   }
 
 private:
-  static Registrar<char, RespTypeParser, RespBulkStringParser> registrar;
+  static RespParserRegistrar<RespBulkStringParser> registrar;
 };
 
 class RespErrorParser : public RespTypeParser {
@@ -58,5 +64,5 @@ public:
   virtual RespType::Type getType() const override { return RespType::ERROR; }
 
 private:
-  static Registrar<char, RespTypeParser, RespErrorParser> registrar;
+  static RespParserRegistrar<RespErrorParser> registrar;
 };

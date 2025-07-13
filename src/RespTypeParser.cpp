@@ -1,5 +1,4 @@
 #include "RespTypeParser.hpp"
-#include "Registrar.hpp"
 #include "Registry.hpp"
 #include "RespType.hpp"
 #include <exception>
@@ -9,7 +8,7 @@
 #include <stdexcept>
 #include <string>
 
-Registrar<char, RespTypeParser, RespStringParser>
+RespParserRegistrar<RespStringParser>
     RespStringParser::registrar('+');
 
 std::unique_ptr<RespType> RespStringParser::parse(std::istream &in) {
@@ -23,7 +22,7 @@ std::unique_ptr<RespType> RespStringParser::parse(std::istream &in) {
   return std::make_unique<RespString>(line);
 }
 
-Registrar<char, RespTypeParser, RespIntParser> RespIntParser::registrar(':');
+RespParserRegistrar<RespIntParser> RespIntParser::registrar(':');
 
 std::unique_ptr<RespType> RespIntParser::parse(std::istream &in) {
   std::string line;
@@ -44,7 +43,7 @@ std::unique_ptr<RespType> RespIntParser::parse(std::istream &in) {
   return std::make_unique<RespInt>(val);
 }
 
-Registrar<char, RespTypeParser, RespBulkStringParser>
+RespParserRegistrar<RespBulkStringParser>
     RespBulkStringParser::registrar('$');
 
 std::unique_ptr<RespType> RespBulkStringParser::parse(std::istream &in) {
@@ -79,7 +78,7 @@ std::unique_ptr<RespType> RespBulkStringParser::parse(std::istream &in) {
   return std::make_unique<RespBulkString>(std::move(val));
 }
 
-Registrar<char, RespTypeParser, RespErrorParser>
+RespParserRegistrar<RespErrorParser>
     RespErrorParser::registrar('-');
 
 std::unique_ptr<RespType> RespErrorParser::parse(std::istream &in) {
@@ -93,7 +92,7 @@ std::unique_ptr<RespType> RespErrorParser::parse(std::istream &in) {
   return std::make_unique<RespError>(std::move(line));
 }
 
-Registrar<char, RespTypeParser, RespArrayParser>
+RespParserRegistrar<RespArrayParser>
     RespArrayParser::registrar('*');
 
 std::unique_ptr<RespType> RespArrayParser::parse(std::istream &in) {

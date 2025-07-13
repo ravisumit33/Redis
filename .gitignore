@@ -45,8 +45,10 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 
-build/
+build*/
 vcpkg_installed
 
 t*.hpp
 t*.cpp
+
+.DS_Store

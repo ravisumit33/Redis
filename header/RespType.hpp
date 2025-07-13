@@ -92,6 +92,9 @@ public:
 
   virtual std::string serialize() override {
     std::string serialized_string("*");
+    if (value.empty()) {
+      return serialized_string + "-1" + CRLF;
+    }
     serialized_string += std::to_string(value.size());
     for (const auto &element : value) {
       serialized_string += element->serialize();
@@ -115,6 +118,9 @@ public:
   std::string getValue() const { return value; }
 
   virtual std::string serialize() override {
+    if (value.empty()) {
+      return std::string("$-1") + CRLF;
+    }
     return std::string("$") + std::to_string(value.length()) + CRLF +
            getValue() + CRLF;
   }

@@ -1,6 +1,5 @@
 #include "ClientConnection.hpp"
 #include "Command.hpp"
-#include "Registry.hpp"
 #include "RespType.hpp"
 #include "RespTypeParser.hpp"
 #include "unistd.h"
@@ -73,7 +72,10 @@ ClientConnection::parseCommand(std::istream &in) {
     throw std::runtime_error("Unexpected command RESP type");
   }
 
-  auto parser = Registry<char, RespTypeParser>::instance().get(type);
+  auto parser = RespParserRegistry::instance().get(type);
+  if (!parser) {
+    throw std::runtime_error("Malformed command");
+  }
   auto parsed_command = parser->parse(in);
   RespArray &cmd_arr = static_cast<RespArray &>(*parsed_command);
 
@@ -85,8 +87,10 @@ ClientConnection::parseCommand(std::istream &in) {
 
   auto cmd_name =
       static_cast<const RespBulkString &>(*command_name_ptr).getValue();
-  auto command = Registry<std::string, Command>::instance().get(cmd_name);
-
+  auto command = CommandRegistry::instance().get(cmd_name);
+  if (!command) {
+    throw std::runtime_error("Command not supported");
+  }
   command_args.erase(command_args.begin());
 
   return {std::move(command), std::move(command_args)};
