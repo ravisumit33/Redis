@@ -49,18 +49,18 @@ SetCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
     }
   }
 
-  auto key = static_cast<RespBulkString &>(*args[0]).getValue();
-  auto value = static_cast<RespBulkString &>(*args[1]).getValue();
+  auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  auto value = static_cast<RespBulkString &>(*args.at(1)).getValue();
 
   std::optional<std::chrono::milliseconds> expiry = std::nullopt;
   if (nargs == 4) {
-    auto expiryArgName = static_cast<RespBulkString &>(*args[2]).getValue();
+    auto expiryArgName = static_cast<RespBulkString &>(*args.at(2)).getValue();
     if (expiryArgName != "px") {
       return std::make_unique<RespError>("Unexpected syntax");
     }
     try {
       auto expiryDelta =
-          std::stoul(static_cast<RespBulkString &>(*args[3]).getValue());
+          std::stoul(static_cast<RespBulkString &>(*args.at(3)).getValue());
       expiry = std::chrono::milliseconds(expiryDelta);
     } catch (const std::exception &ex) {
       std::cerr << "Unexpected expiry time: " << ex.what() << std::endl;
@@ -84,7 +84,7 @@ GetCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
     return std::make_unique<RespError>("Unexpected argument type");
   }
 
-  auto key = static_cast<RespBulkString &>(*args[0]).getValue();
+  auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
 
   std::string return_value = "";
   auto stored_value = RedisStore::instance().get(key);

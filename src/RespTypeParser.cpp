@@ -1,5 +1,4 @@
 #include "RespTypeParser.hpp"
-#include "Registry.hpp"
 #include "RespType.hpp"
 #include <exception>
 #include <iostream>
@@ -8,8 +7,7 @@
 #include <stdexcept>
 #include <string>
 
-RespParserRegistrar<RespStringParser>
-    RespStringParser::registrar('+');
+RespParserRegistrar<RespStringParser> RespStringParser::registrar('+');
 
 std::unique_ptr<RespType> RespStringParser::parse(std::istream &in) {
   std::string line;
@@ -43,8 +41,7 @@ std::unique_ptr<RespType> RespIntParser::parse(std::istream &in) {
   return std::make_unique<RespInt>(val);
 }
 
-RespParserRegistrar<RespBulkStringParser>
-    RespBulkStringParser::registrar('$');
+RespParserRegistrar<RespBulkStringParser> RespBulkStringParser::registrar('$');
 
 std::unique_ptr<RespType> RespBulkStringParser::parse(std::istream &in) {
   std::string line;
@@ -78,8 +75,7 @@ std::unique_ptr<RespType> RespBulkStringParser::parse(std::istream &in) {
   return std::make_unique<RespBulkString>(std::move(val));
 }
 
-RespParserRegistrar<RespErrorParser>
-    RespErrorParser::registrar('-');
+RespParserRegistrar<RespErrorParser> RespErrorParser::registrar('-');
 
 std::unique_ptr<RespType> RespErrorParser::parse(std::istream &in) {
   std::string line;
@@ -92,8 +88,7 @@ std::unique_ptr<RespType> RespErrorParser::parse(std::istream &in) {
   return std::make_unique<RespError>(std::move(line));
 }
 
-RespParserRegistrar<RespArrayParser>
-    RespArrayParser::registrar('*');
+RespParserRegistrar<RespArrayParser> RespArrayParser::registrar('*');
 
 std::unique_ptr<RespType> RespArrayParser::parse(std::istream &in) {
   std::string line;
@@ -123,7 +118,7 @@ std::unique_ptr<RespType> RespArrayParser::parse(std::istream &in) {
       throw std::runtime_error("Invalid array");
     }
 
-    auto parser = Registry<char, RespTypeParser>::instance().get(prefix);
+    auto parser = RespParserRegistry::instance().get(prefix);
     if (!parser) {
       throw std::runtime_error("Invalid array");
     }

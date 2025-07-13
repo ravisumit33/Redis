@@ -8,7 +8,11 @@ int main(int argc, char **argv) {
   std::cerr << std::unitbuf;
 
   try {
-    RedisServer server(6379);
+    unsigned port = 6379;
+    if (argc > 1) {
+      port = std::stoi(argv[2]);
+    }
+    RedisServer server(port);
     server.start();
   } catch (const std::exception &e) {
     std::cerr << "Server error: " << e.what() << std::endl;
