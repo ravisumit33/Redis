@@ -3,13 +3,12 @@
 #include <iostream>
 
 int main(int argc, char **argv) {
-  // Flush after every std::cout / std::cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
 
   try {
     unsigned port = 6379;
-    if (argc > 1) {
+    if (argc == 3 && std::string(argv[1]) == "--port") {
       port = std::stoi(argv[2]);
     }
     RedisServer server(port);

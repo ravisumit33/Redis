@@ -53,3 +53,12 @@ public:
 private:
   static CommandRegistrar<GetCommand> registrar;
 };
+
+class InfoCommand : public Command {
+public:
+  virtual std::unique_ptr<RespType>
+  execute(std::vector<std::unique_ptr<RespType>> args) override;
+
+private:
+  static CommandRegistrar<InfoCommand> registrar;
+};

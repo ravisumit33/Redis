@@ -60,7 +60,7 @@ void ClientConnection::handleClient() {
   }
 }
 
-std::pair<std::unique_ptr<Command>, std::vector<std::unique_ptr<RespType>>>
+std::pair<Command *, std::vector<std::unique_ptr<RespType>>>
 ClientConnection::parseCommand(std::istream &in) {
   char type;
   in.get(type);
@@ -93,5 +93,5 @@ ClientConnection::parseCommand(std::istream &in) {
   }
   command_args.erase(command_args.begin());
 
-  return {std::move(command), std::move(command_args)};
+  return {command, std::move(command_args)};
 }

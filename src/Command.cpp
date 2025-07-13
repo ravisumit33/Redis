@@ -96,3 +96,23 @@ GetCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
   return_value = stored_value.value();
   return std::make_unique<RespBulkString>(return_value);
 }
+
+CommandRegistrar<InfoCommand> InfoCommand::registrar("INFO");
+
+std::unique_ptr<RespType>
+InfoCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
+  if (args.size() != 1) {
+    return std::make_unique<RespError>("Unexpected number of args");
+  }
+
+  if (args.at(0)->getType() != RespType::BULK_STRING) {
+    return std::make_unique<RespError>("Unexpected argument type");
+  }
+
+  auto arg = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  if (arg != "replication") {
+    return std::make_unique<RespError>("Unsupported command arg");
+  }
+
+  return std::make_unique<RespBulkString>("role:master");
+}

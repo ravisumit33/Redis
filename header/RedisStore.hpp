@@ -38,6 +38,7 @@ public:
   }
 
 private:
+  RedisStore() = default;
   std::unordered_map<std::string, RedisStoreValue> mStore;
   mutable std::mutex mMutex;
 };
