@@ -1,4 +1,5 @@
 #include "ClientConnection.hpp"
+#include "AppConfig.hpp"
 #include "Command.hpp"
 #include "RespType.hpp"
 #include "RespTypeParser.hpp"
@@ -13,8 +14,9 @@
 #include <sys/socket.h>
 #include <utility>
 
-ClientConnection::ClientConnection(const unsigned socket_fd)
-    : m_socket_fd(socket_fd) {}
+ClientConnection::ClientConnection(const unsigned socket_fd,
+                                   const AppConfig &config)
+    : m_socket_fd(socket_fd), m_config(config) {}
 
 ClientConnection::~ClientConnection() { close(m_socket_fd); }
 
@@ -47,7 +49,7 @@ void ClientConnection::handleClient() {
       std::stringstream ss(data);
       try {
         auto [command, args] = parseCommand(ss);
-        auto response = command->execute(std::move(args));
+        auto response = command->execute(std::move(args), m_config);
         writeToSocket(response->serialize());
       } catch (const std::exception &ex) {
         std::cerr << "Exception occurred: " << ex.what() << std::endl;

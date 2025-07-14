@@ -9,6 +9,7 @@ file(GLOB_RECURSE SOURCE_FILES
   ${CMAKE_SOURCE_DIR}/src/Command.cpp
   ${CMAKE_SOURCE_DIR}/src/RespTypeParser.cpp
   ${CMAKE_SOURCE_DIR}/src/RedisStore.cpp
+  ${CMAKE_SOURCE_DIR}/src/ArgParser.cpp
 )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

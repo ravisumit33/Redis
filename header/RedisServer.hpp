@@ -1,14 +1,16 @@
 #pragma once
 
+#include "AppConfig.hpp"
+
 class RedisServer {
 public:
-  RedisServer(const unsigned port);
+  RedisServer(const AppConfig &config);
   void start();
   void stop();
   ~RedisServer();
 
 private:
-  const unsigned m_port;
+  AppConfig m_config;
   bool m_isRunning = false;
   int m_server_fd = -1;
 

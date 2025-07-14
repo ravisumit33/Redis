@@ -1,4 +1,5 @@
 #include "RedisServer.hpp"
+#include "AppConfig.hpp"
 #include "ClientConnection.hpp"
 #include <arpa/inet.h>
 #include <cassert>
@@ -7,12 +8,12 @@
 #include <thread>
 #include <unistd.h>
 
-RedisServer::RedisServer(const unsigned port) : m_port(port) {}
+RedisServer::RedisServer(const AppConfig &config) : m_config(config) {}
 
 void RedisServer::start() {
   setupSocket();
   m_isRunning = true;
-  std::cout << "Redis server started at port: " << m_port << std::endl;
+  std::cout << "Redis server started at port: " << m_config.port << std::endl;
   acceptConnections();
 }
 
@@ -45,13 +46,13 @@ void RedisServer::setupSocket() {
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
-  server_addr.sin_port = htons(m_port);
+  server_addr.sin_port = htons(m_config.port);
 
   if (bind(m_server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) !=
       0) {
     close(m_server_fd);
     throw std::runtime_error("Failed to bind to port " +
-                             std::to_string(m_port));
+                             std::to_string(m_config.port));
   }
 
   int connection_backlog = 5;
@@ -80,8 +81,8 @@ void RedisServer::acceptConnections() {
 
     std::cout << "Client connected" << std::endl;
 
-    std::thread client_thread([client_fd]() {
-      ClientConnection client_con(client_fd);
+    std::thread client_thread([client_fd, this]() {
+      ClientConnection client_con(client_fd, m_config);
       client_con.handleClient();
     });
     client_thread.detach();

@@ -10,7 +10,8 @@
 CommandRegistrar<EchoCommand> EchoCommand::registrar("ECHO");
 
 std::unique_ptr<RespType>
-EchoCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
+EchoCommand::execute(std::vector<std::unique_ptr<RespType>> args,
+                     const AppConfig &config) {
   if (args.size() != 1) {
     return std::make_unique<RespError>("Unexpected number of args");
   }
@@ -25,7 +26,8 @@ EchoCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
 CommandRegistrar<PingCommand> PingCommand::registrar("PING");
 
 std::unique_ptr<RespType>
-PingCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
+PingCommand::execute(std::vector<std::unique_ptr<RespType>> args,
+                     const AppConfig &config) {
   if (args.size() != 0) {
     return std::make_unique<RespError>("Unexpected number of args");
   }
@@ -36,7 +38,8 @@ PingCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
 CommandRegistrar<SetCommand> SetCommand::registrar("SET");
 
 std::unique_ptr<RespType>
-SetCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
+SetCommand::execute(std::vector<std::unique_ptr<RespType>> args,
+                    const AppConfig &config) {
   if (args.size() != 4 && args.size() != 2) {
     return std::make_unique<RespError>("Unexpected number of args");
   }
@@ -75,7 +78,8 @@ SetCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
 CommandRegistrar<GetCommand> GetCommand::registrar("GET");
 
 std::unique_ptr<RespType>
-GetCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
+GetCommand::execute(std::vector<std::unique_ptr<RespType>> args,
+                    const AppConfig &config) {
   if (args.size() != 1) {
     return std::make_unique<RespError>("Unexpected number of args");
   }
@@ -100,7 +104,8 @@ GetCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
 CommandRegistrar<InfoCommand> InfoCommand::registrar("INFO");
 
 std::unique_ptr<RespType>
-InfoCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
+InfoCommand::execute(std::vector<std::unique_ptr<RespType>> args,
+                     const AppConfig &config) {
   if (args.size() != 1) {
     return std::make_unique<RespError>("Unexpected number of args");
   }
@@ -114,5 +119,8 @@ InfoCommand::execute(std::vector<std::unique_ptr<RespType>> args) {
     return std::make_unique<RespError>("Unsupported command arg");
   }
 
+  if (!config.replicaOf.empty()) {
+    return std::make_unique<RespBulkString>("role:slave");
+  }
   return std::make_unique<RespBulkString>("role:master");
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AppConfig.hpp"
 #include "Registrar.hpp"
 #include "Registry.hpp"
 #include "RespType.hpp"
@@ -10,7 +11,8 @@ class Command {
 public:
   virtual ~Command() = default;
   virtual std::unique_ptr<RespType>
-  execute(std::vector<std::unique_ptr<RespType>> args) = 0;
+  execute(std::vector<std::unique_ptr<RespType>> args,
+          const AppConfig &config) = 0;
 };
 
 using CommandRegistry = Registry<std::string, Command>;
@@ -21,7 +23,8 @@ using CommandRegistrar = Registrar<std::string, Command, T>;
 class EchoCommand : public Command {
 public:
   virtual std::unique_ptr<RespType>
-  execute(std::vector<std::unique_ptr<RespType>> args) override;
+  execute(std::vector<std::unique_ptr<RespType>> args,
+          const AppConfig &config) override;
 
 private:
   static CommandRegistrar<EchoCommand> registrar;
@@ -30,7 +33,8 @@ private:
 class PingCommand : public Command {
 public:
   virtual std::unique_ptr<RespType>
-  execute(std::vector<std::unique_ptr<RespType>> args) override;
+  execute(std::vector<std::unique_ptr<RespType>> args,
+          const AppConfig &config) override;
 
 private:
   static CommandRegistrar<PingCommand> registrar;
@@ -39,7 +43,8 @@ private:
 class SetCommand : public Command {
 public:
   virtual std::unique_ptr<RespType>
-  execute(std::vector<std::unique_ptr<RespType>> args) override;
+  execute(std::vector<std::unique_ptr<RespType>> args,
+          const AppConfig &config) override;
 
 private:
   static CommandRegistrar<SetCommand> registrar;
@@ -48,7 +53,8 @@ private:
 class GetCommand : public Command {
 public:
   virtual std::unique_ptr<RespType>
-  execute(std::vector<std::unique_ptr<RespType>> args) override;
+  execute(std::vector<std::unique_ptr<RespType>> args,
+          const AppConfig &config) override;
 
 private:
   static CommandRegistrar<GetCommand> registrar;
@@ -57,7 +63,8 @@ private:
 class InfoCommand : public Command {
 public:
   virtual std::unique_ptr<RespType>
-  execute(std::vector<std::unique_ptr<RespType>> args) override;
+  execute(std::vector<std::unique_ptr<RespType>> args,
+          const AppConfig &config) override;
 
 private:
   static CommandRegistrar<InfoCommand> registrar;
