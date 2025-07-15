@@ -14,6 +14,7 @@
 #include <string>
 #include <sys/socket.h>
 #include <utility>
+#include <vector>
 
 Connection::Connection(const unsigned socket_fd, const AppConfig &config)
     : m_socket_fd(socket_fd), m_config(config) {}
@@ -98,7 +99,16 @@ void ClientConnection::handleConnection() {
   }
 }
 
-void ServerConnection::validateResponse(const std::string &expectedResponse) {
+void ServerConnection::sendCommand(
+    std::vector<std::unique_ptr<RespType>> args) {
+  auto array = std::make_unique<RespArray>();
+  for (auto &resp_type_ptr : args) {
+    array->add(std::move(resp_type_ptr));
+  }
+  writeToSocket(array->serialize());
+}
+
+void ServerConnection::validateResponse(auto validate) {
   auto servResponse = readFromSocket();
   std::istringstream in(servResponse);
   char type;
@@ -117,44 +127,75 @@ void ServerConnection::validateResponse(const std::string &expectedResponse) {
   }
   auto parsed_response = parser->parse(in);
   RespString &response = static_cast<RespString &>(*parsed_response);
-  if (const auto &resp = response.getValue(); resp != expectedResponse) {
-    std::cerr << "Expected " << expectedResponse << " but got " << resp
-              << std::endl;
-    throw std::runtime_error("Unexpected response");
-  }
-}
-
-void ServerConnection::handShake() {
-  auto array = std::make_unique<RespArray>();
-  auto init_msg = std::make_unique<RespBulkString>("PING");
-  array->add(std::move(init_msg));
-  writeToSocket(array->serialize());
-  validateResponse("PONG");
+  validate(response.getValue());
 }
 
 void ServerConnection::configureRepl() {
-  auto array = std::make_unique<RespArray>();
-  auto replconf = std::make_unique<RespBulkString>("REPLCONF");
-  auto lp = std::make_unique<RespBulkString>("listening-port");
-  auto port =
-      std::make_unique<RespBulkString>(std::to_string(getConfig().getPort()));
-  array->add(std::move(replconf))->add(std::move(lp))->add(std::move(port));
-  writeToSocket(array->serialize());
-  validateResponse("OK");
+  std::vector<std::unique_ptr<RespType>> cmd;
+  cmd.push_back(std::make_unique<RespBulkString>("REPLCONF"));
+  cmd.push_back(std::make_unique<RespBulkString>("listening-port"));
+  cmd.push_back(
+      std::make_unique<RespBulkString>(std::to_string(getConfig().getPort())));
+  sendCommand(std::move(cmd));
+  validateResponse([](const std::string &response) {
+    if (response != "OK") {
+      std::cerr << "Expected OK but got " << response << std::endl;
+      throw std::runtime_error("Unexpected response from server");
+    }
+  });
 
-  array = std::make_unique<RespArray>();
-  replconf = std::make_unique<RespBulkString>("REPLCONF");
-  auto capa = std::make_unique<RespBulkString>("capa");
-  auto psync = std::make_unique<RespBulkString>("psync2");
-  array->add(std::move(replconf))->add(std::move(capa))->add(std::move(psync));
-  writeToSocket(array->serialize());
-  validateResponse("OK");
+  cmd.clear();
+  cmd.push_back(std::make_unique<RespBulkString>("REPLCONF"));
+  cmd.push_back(std::make_unique<RespBulkString>("capa"));
+  cmd.push_back(std::make_unique<RespBulkString>("psync2"));
+  sendCommand(std::move(cmd));
+  validateResponse([](const std::string &response) {
+    if (response != "OK") {
+      std::cerr << "Expected OK but got " << response << std::endl;
+      throw std::runtime_error("Unexpected response from server");
+    }
+  });
+}
+
+void ServerConnection::configurePsync() {
+  std::vector<std::unique_ptr<RespType>> cmd;
+  cmd.push_back(std::make_unique<RespBulkString>("PSYNC"));
+  cmd.push_back(std::make_unique<RespBulkString>("?"));
+  cmd.push_back(std::make_unique<RespBulkString>("-1"));
+  sendCommand(std::move(cmd));
+  validateResponse([](const std::string &response) {
+    std::istringstream ss(response);
+    ss.exceptions(std::ios::failbit | std::ios::badbit);
+    std::string cmd, repl_id;
+    unsigned repl_offset;
+    ss >> cmd >> repl_id >> repl_offset;
+    if (cmd != "FULLRESYNC") {
+      std::cerr << "Expected FULLRESYNC but got " << response << std::endl;
+      throw std::runtime_error("Unexpected response from server");
+    }
+  });
+}
+
+void ServerConnection::handShake() {
+  std::vector<std::unique_ptr<RespType>> cmd;
+  cmd.push_back(std::make_unique<RespBulkString>("PING"));
+  sendCommand(std::move(cmd));
+  validateResponse([](const std::string &response) {
+    if (response != "PONG") {
+      std::cerr << "Expected PONG but got " << response << std::endl;
+      throw std::runtime_error("Unexpected response from server");
+    }
+  });
+  std::cout << "PING complete" << std::endl;
+
+  configureRepl();
+  std::cout << "Repl configured" << std::endl;
+
+  configurePsync();
+  std::cout << "Psync configured" << std::endl;
 }
 
 void ServerConnection::handleConnection() {
-  std::cout << "Handling server connection" << std::endl;
   handShake();
   std::cout << "Handshake done" << std::endl;
-  configureRepl();
-  std::cout << "Repl configuration done" << std::endl;
 }

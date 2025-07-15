@@ -5,6 +5,7 @@
 #include <istream>
 #include <memory>
 #include <string>
+#include <vector>
 
 class Connection {
 public:
@@ -42,9 +43,14 @@ public:
 
   virtual void handleConnection() override;
 
-  void handShake();
+private:
+  void sendCommand(std::vector<std::unique_ptr<RespType>> args);
+
+  void validateResponse(auto validate);
 
   void configureRepl();
 
-  void validateResponse(const std::string &expectedResponse);
+  void configurePsync();
+
+  void handShake();
 };

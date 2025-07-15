@@ -79,3 +79,13 @@ public:
 private:
   static CommandRegistrar<ReplConfCommand> registrar;
 };
+
+class PsyncCommand : public Command {
+public:
+  virtual std::unique_ptr<RespType>
+  execute(std::vector<std::unique_ptr<RespType>> args,
+          const AppConfig &config) override;
+
+private:
+  static CommandRegistrar<PsyncCommand> registrar;
+};

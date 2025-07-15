@@ -138,3 +138,13 @@ ReplConfCommand::execute(std::vector<std::unique_ptr<RespType>> args,
                          const AppConfig &config) {
   return std::make_unique<RespString>("OK");
 }
+
+CommandRegistrar<PsyncCommand> PsyncCommand::registrar("PSYNC");
+
+std::unique_ptr<RespType>
+PsyncCommand::execute(std::vector<std::unique_ptr<RespType>> args,
+                      const AppConfig &config) {
+  auto [master_replid, master_repl_offset] = *config.getMasterMetadata();
+  return std::make_unique<RespString>("FULLRESYNC " + master_replid + " " +
+                                      std::to_string(master_repl_offset));
+}
