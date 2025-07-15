@@ -76,7 +76,10 @@ public:
     return std::make_unique<RespArray>(*this);
   }
 
-  void add(std::unique_ptr<RespType> item) { value.push_back(std::move(item)); }
+  RespArray *add(std::unique_ptr<RespType> item) {
+    value.push_back(std::move(item));
+    return this;
+  }
 
   const RespType *at(size_t idx) { return value.at(idx).get(); }
 

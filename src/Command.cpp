@@ -1,4 +1,5 @@
 #include "Command.hpp"
+#include "AppConfig.hpp"
 #include "RedisStore.hpp"
 #include "RespType.hpp"
 #include <chrono>
@@ -119,13 +120,21 @@ InfoCommand::execute(std::vector<std::unique_ptr<RespType>> args,
     return std::make_unique<RespError>("Unsupported command arg");
   }
 
-  if (!config.replicaOf.empty()) {
+  if (config.getSlaveMetadata()) {
     return std::make_unique<RespBulkString>("role:slave");
   }
   std::string replicationInfo = "role:master";
-  replicationInfo +=
-      std::string("\n") + "master_replid:" + config.master_replid;
-  replicationInfo += std::string("\n") + "master_repl_offset:" +
-                     std::to_string(config.master_repl_offset);
+  auto [master_replid, master_repl_offset] = *config.getMasterMetadata();
+  replicationInfo += std::string("\n") + "master_replid:" + master_replid;
+  replicationInfo += std::string("\n") +
+                     "master_repl_offset:" + std::to_string(master_repl_offset);
   return std::make_unique<RespBulkString>(replicationInfo);
+}
+
+CommandRegistrar<ReplConfCommand> ReplConfCommand::registrar("REPLCONF");
+
+std::unique_ptr<RespType>
+ReplConfCommand::execute(std::vector<std::unique_ptr<RespType>> args,
+                         const AppConfig &config) {
+  return std::make_unique<RespString>("OK");
 }

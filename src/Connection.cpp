@@ -8,6 +8,7 @@
 #include <iostream>
 #include <istream>
 #include <memory>
+#include <ostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -97,9 +98,63 @@ void ClientConnection::handleConnection() {
   }
 }
 
-void ServerConnection::handleConnection() {
+void ServerConnection::validateResponse(const std::string &expectedResponse) {
+  auto servResponse = readFromSocket();
+  std::istringstream in(servResponse);
+  char type;
+  in.get(type);
+  if (!in) {
+    throw std::runtime_error("No response RESP type");
+  }
+
+  if (type != '+') {
+    throw std::runtime_error("Unexpected response RESP type");
+  }
+
+  auto parser = RespParserRegistry::instance().get(type);
+  if (!parser) {
+    throw std::runtime_error("Malformed response");
+  }
+  auto parsed_response = parser->parse(in);
+  RespString &response = static_cast<RespString &>(*parsed_response);
+  if (const auto &resp = response.getValue(); resp != expectedResponse) {
+    std::cerr << "Expected " << expectedResponse << " but got " << resp
+              << std::endl;
+    throw std::runtime_error("Unexpected response");
+  }
+}
+
+void ServerConnection::handShake() {
   auto array = std::make_unique<RespArray>();
   auto init_msg = std::make_unique<RespBulkString>("PING");
   array->add(std::move(init_msg));
   writeToSocket(array->serialize());
+  validateResponse("PONG");
+}
+
+void ServerConnection::configureRepl() {
+  auto array = std::make_unique<RespArray>();
+  auto replconf = std::make_unique<RespBulkString>("REPLCONF");
+  auto lp = std::make_unique<RespBulkString>("listening-port");
+  auto port =
+      std::make_unique<RespBulkString>(std::to_string(getConfig().getPort()));
+  array->add(std::move(replconf))->add(std::move(lp))->add(std::move(port));
+  writeToSocket(array->serialize());
+  validateResponse("OK");
+
+  array = std::make_unique<RespArray>();
+  replconf = std::make_unique<RespBulkString>("REPLCONF");
+  auto capa = std::make_unique<RespBulkString>("capa");
+  auto psync = std::make_unique<RespBulkString>("psync2");
+  array->add(std::move(replconf))->add(std::move(capa))->add(std::move(psync));
+  writeToSocket(array->serialize());
+  validateResponse("OK");
+}
+
+void ServerConnection::handleConnection() {
+  std::cout << "Handling server connection" << std::endl;
+  handShake();
+  std::cout << "Handshake done" << std::endl;
+  configureRepl();
+  std::cout << "Repl configuration done" << std::endl;
 }

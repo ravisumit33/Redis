@@ -4,7 +4,7 @@
 #include <arpa/inet.h>
 #include <cassert>
 #include <iostream>
-#include <sstream>
+#include <ostream>
 #include <stdexcept>
 #include <sys/socket.h>
 #include <thread>
@@ -14,11 +14,10 @@ RedisServer::RedisServer(const AppConfig &config) : m_config(config) {}
 
 void RedisServer::start() {
 
-  if (!m_config.replicaOf.empty()) {
-    std::istringstream ss(m_config.replicaOf);
-    std::string master_host;
-    unsigned master_port;
-    ss >> master_host >> master_port;
+  if (auto smetadata = m_config.getSlaveMetadata(); smetadata) {
+    auto [master_host, master_port] = *smetadata;
+    std::cout << "Attaching slave to master: " << master_host << " "
+              << master_port << std::endl;
 
     m_master_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (m_master_fd < 0) {
@@ -26,7 +25,9 @@ void RedisServer::start() {
     }
     struct sockaddr_in master_addr;
     master_addr.sin_family = AF_INET;
-    inet_pton(AF_INET, master_host.c_str(), &master_addr.sin_addr);
+    inet_pton(AF_INET,
+              master_host == "localhost" ? "127.0.0.1" : master_host.c_str(),
+              &master_addr.sin_addr);
     master_addr.sin_port = htons(master_port);
 
     if (connect(m_master_fd, (struct sockaddr *)&master_addr,
@@ -34,7 +35,7 @@ void RedisServer::start() {
       throw std::runtime_error("Failed to connect to master");
     }
 
-    std::cout << "Client connected" << std::endl;
+    std::cout << "Slave connected to master" << std::endl;
 
     std::thread master_thread([this]() {
       ServerConnection master_con(m_master_fd, m_config);
@@ -45,7 +46,8 @@ void RedisServer::start() {
 
   setupSocket();
   m_isRunning = true;
-  std::cout << "Redis server started at port: " << m_config.port << std::endl;
+  std::cout << "Redis server started at port: " << m_config.getPort()
+            << std::endl;
   acceptConnections();
 }
 
@@ -82,13 +84,13 @@ void RedisServer::setupSocket() {
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
-  server_addr.sin_port = htons(m_config.port);
+  server_addr.sin_port = htons(m_config.getPort());
 
   if (bind(m_server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) !=
       0) {
     close(m_server_fd);
     throw std::runtime_error("Failed to bind to port " +
-                             std::to_string(m_config.port));
+                             std::to_string(m_config.getPort()));
   }
 
   int connection_backlog = 5;

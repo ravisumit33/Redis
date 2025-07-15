@@ -5,6 +5,7 @@
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <string>
@@ -38,19 +39,25 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  AppConfig config{
-      .port =
-          static_cast<unsigned>(std::stoul(parser.get<std::string>("port"))),
-      .replicaOf = parser.get<std::string>("replicaof"),
-      .master_replid = generateRandomHexId(),
-      .master_repl_offset = 0,
-  };
+  std::optional<MasterMetadata> mmetadata = std::nullopt;
+  std::optional<SlaveMetadata> smetadata = std::nullopt;
+  auto replicaof = parser.get<std::string>("replicaof");
+  if (replicaof.empty()) {
+    mmetadata = {.master_replid = generateRandomHexId(),
+                 .master_repl_offset = 0};
+  } else {
+    std::string master_host;
+    unsigned master_port;
+    std::istringstream ss(replicaof);
+    ss >> master_host >> master_port;
+    smetadata = {.master_host = master_host, .master_port = master_port};
+  }
+
+  AppConfig config(
+      static_cast<unsigned>(std::stoul(parser.get<std::string>("port"))),
+      mmetadata, smetadata);
 
   try {
-    unsigned port = 6379;
-    if (argc == 3 && std::string(argv[1]) == "--port") {
-      port = std::stoi(argv[2]);
-    }
     RedisServer server(config);
     server.start();
   } catch (const std::exception &e) {

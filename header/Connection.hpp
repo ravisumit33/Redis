@@ -31,6 +31,7 @@ class ClientConnection : public Connection {
 public:
   ClientConnection(const unsigned socket_fd, const AppConfig &config)
       : Connection(socket_fd, config) {}
+
   virtual void handleConnection() override;
 };
 
@@ -38,5 +39,12 @@ class ServerConnection : public Connection {
 public:
   ServerConnection(const unsigned socket_fd, const AppConfig &config)
       : Connection(socket_fd, config) {}
+
   virtual void handleConnection() override;
+
+  void handShake();
+
+  void configureRepl();
+
+  void validateResponse(const std::string &expectedResponse);
 };

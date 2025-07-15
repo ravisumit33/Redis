@@ -69,3 +69,13 @@ public:
 private:
   static CommandRegistrar<InfoCommand> registrar;
 };
+
+class ReplConfCommand : public Command {
+public:
+  virtual std::unique_ptr<RespType>
+  execute(std::vector<std::unique_ptr<RespType>> args,
+          const AppConfig &config) override;
+
+private:
+  static CommandRegistrar<ReplConfCommand> registrar;
+};
