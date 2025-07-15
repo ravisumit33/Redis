@@ -122,5 +122,10 @@ InfoCommand::execute(std::vector<std::unique_ptr<RespType>> args,
   if (!config.replicaOf.empty()) {
     return std::make_unique<RespBulkString>("role:slave");
   }
-  return std::make_unique<RespBulkString>("role:master");
+  std::string replicationInfo = "role:master";
+  replicationInfo +=
+      std::string("\n") + "master_replid:" + config.master_replid;
+  replicationInfo += std::string("\n") + "master_repl_offset:" +
+                     std::to_string(config.master_repl_offset);
+  return std::make_unique<RespBulkString>(replicationInfo);
 }

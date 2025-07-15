@@ -1,9 +1,26 @@
 #include "AppConfig.hpp"
 #include "ArgParser.hpp"
 #include "RedisServer.hpp"
+#include <cstddef>
 #include <exception>
+#include <iomanip>
 #include <iostream>
+#include <random>
+#include <sstream>
 #include <string>
+
+std::string generateRandomHexId() {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<uint8_t> dis(0, 255);
+
+  std::ostringstream oss;
+  for (size_t i = 0; i < 20; ++i) {
+    oss << std::hex << std::setw(2) << std::setfill('0')
+        << static_cast<int>(dis(gen));
+  }
+  return oss.str();
+}
 
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
@@ -21,13 +38,13 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  std::cout << "Port: " << parser.get<std::string>("port") << std::endl;
-  std::cout << "replicaOf: " << parser.get<std::string>("replicaof")
-            << std::endl;
-
-  AppConfig config{.port = static_cast<unsigned>(
-                       std::stoul(parser.get<std::string>("port"))),
-                   .replicaOf = parser.get<std::string>("replicaof")};
+  AppConfig config{
+      .port =
+          static_cast<unsigned>(std::stoul(parser.get<std::string>("port"))),
+      .replicaOf = parser.get<std::string>("replicaof"),
+      .master_replid = generateRandomHexId(),
+      .master_repl_offset = 0,
+  };
 
   try {
     unsigned port = 6379;
