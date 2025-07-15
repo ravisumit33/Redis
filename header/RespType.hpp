@@ -149,3 +149,15 @@ public:
 private:
   std::string value;
 };
+
+class RespRDB : public RespBulkString {
+public:
+  RespRDB(std::string val) : RespBulkString(std::move(val)) {}
+  virtual std::string serialize() override {
+    auto bulkStr = RespBulkString::serialize();
+    // remove CRLF
+    bulkStr.pop_back();
+    bulkStr.pop_back();
+    return bulkStr;
+  }
+};

@@ -10,7 +10,7 @@
 class Command {
 public:
   virtual ~Command() = default;
-  virtual std::unique_ptr<RespType>
+  virtual std::vector<std::unique_ptr<RespType>>
   execute(std::vector<std::unique_ptr<RespType>> args,
           const AppConfig &config) = 0;
 };
@@ -22,7 +22,7 @@ using CommandRegistrar = Registrar<std::string, Command, T>;
 
 class EchoCommand : public Command {
 public:
-  virtual std::unique_ptr<RespType>
+  virtual std::vector<std::unique_ptr<RespType>>
   execute(std::vector<std::unique_ptr<RespType>> args,
           const AppConfig &config) override;
 
@@ -32,7 +32,7 @@ private:
 
 class PingCommand : public Command {
 public:
-  virtual std::unique_ptr<RespType>
+  virtual std::vector<std::unique_ptr<RespType>>
   execute(std::vector<std::unique_ptr<RespType>> args,
           const AppConfig &config) override;
 
@@ -42,7 +42,7 @@ private:
 
 class SetCommand : public Command {
 public:
-  virtual std::unique_ptr<RespType>
+  virtual std::vector<std::unique_ptr<RespType>>
   execute(std::vector<std::unique_ptr<RespType>> args,
           const AppConfig &config) override;
 
@@ -52,7 +52,7 @@ private:
 
 class GetCommand : public Command {
 public:
-  virtual std::unique_ptr<RespType>
+  virtual std::vector<std::unique_ptr<RespType>>
   execute(std::vector<std::unique_ptr<RespType>> args,
           const AppConfig &config) override;
 
@@ -62,7 +62,7 @@ private:
 
 class InfoCommand : public Command {
 public:
-  virtual std::unique_ptr<RespType>
+  virtual std::vector<std::unique_ptr<RespType>>
   execute(std::vector<std::unique_ptr<RespType>> args,
           const AppConfig &config) override;
 
@@ -72,7 +72,7 @@ private:
 
 class ReplConfCommand : public Command {
 public:
-  virtual std::unique_ptr<RespType>
+  virtual std::vector<std::unique_ptr<RespType>>
   execute(std::vector<std::unique_ptr<RespType>> args,
           const AppConfig &config) override;
 
@@ -82,7 +82,7 @@ private:
 
 class PsyncCommand : public Command {
 public:
-  virtual std::unique_ptr<RespType>
+  virtual std::vector<std::unique_ptr<RespType>>
   execute(std::vector<std::unique_ptr<RespType>> args,
           const AppConfig &config) override;
 

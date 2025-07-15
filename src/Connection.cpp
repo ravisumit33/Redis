@@ -86,8 +86,10 @@ void ClientConnection::handleConnection() {
       std::stringstream ss(data);
       try {
         auto [command, args] = parseCommand(ss);
-        auto response = command->execute(std::move(args), getConfig());
-        writeToSocket(response->serialize());
+        auto responses = command->execute(std::move(args), getConfig());
+        for (const auto &response : responses) {
+          writeToSocket(response->serialize());
+        }
       } catch (const std::exception &ex) {
         std::cerr << "Exception occurred: " << ex.what() << std::endl;
         RespError errResponse("Unknown command");
