@@ -5,7 +5,7 @@ project(redis-starter-cpp)
 file(GLOB_RECURSE SOURCE_FILES
   ${CMAKE_SOURCE_DIR}/src/main.cpp
   ${CMAKE_SOURCE_DIR}/src/RedisServer.cpp
-  ${CMAKE_SOURCE_DIR}/src/ClientConnection.cpp
+  ${CMAKE_SOURCE_DIR}/src/Connection.cpp
   ${CMAKE_SOURCE_DIR}/src/Command.cpp
   ${CMAKE_SOURCE_DIR}/src/RespTypeParser.cpp
   ${CMAKE_SOURCE_DIR}/src/RedisStore.cpp

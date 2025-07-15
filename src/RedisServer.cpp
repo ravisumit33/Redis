@@ -1,9 +1,11 @@
 #include "RedisServer.hpp"
 #include "AppConfig.hpp"
-#include "ClientConnection.hpp"
+#include "Connection.hpp"
 #include <arpa/inet.h>
 #include <cassert>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
@@ -11,6 +13,36 @@
 RedisServer::RedisServer(const AppConfig &config) : m_config(config) {}
 
 void RedisServer::start() {
+
+  if (!m_config.replicaOf.empty()) {
+    std::istringstream ss(m_config.replicaOf);
+    std::string master_host;
+    unsigned master_port;
+    ss >> master_host >> master_port;
+
+    m_master_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (m_master_fd < 0) {
+      throw std::runtime_error("Failed to create master socket");
+    }
+    struct sockaddr_in master_addr;
+    master_addr.sin_family = AF_INET;
+    inet_pton(AF_INET, master_host.c_str(), &master_addr.sin_addr);
+    master_addr.sin_port = htons(master_port);
+
+    if (connect(m_master_fd, (struct sockaddr *)&master_addr,
+                sizeof(master_addr)) != 0) {
+      throw std::runtime_error("Failed to connect to master");
+    }
+
+    std::cout << "Client connected" << std::endl;
+
+    std::thread master_thread([this]() {
+      ServerConnection master_con(m_master_fd, m_config);
+      master_con.handleConnection();
+    });
+    master_thread.detach();
+  }
+
   setupSocket();
   m_isRunning = true;
   std::cout << "Redis server started at port: " << m_config.port << std::endl;
@@ -25,6 +57,10 @@ void RedisServer::stop() {
     close(m_server_fd);
     m_server_fd = -1;
     m_isRunning = false;
+  }
+  if (m_master_fd != -1) {
+    close(m_master_fd);
+    m_master_fd = -1;
   }
   std::cout << "Redis server stopped" << std::endl;
 }
@@ -83,7 +119,7 @@ void RedisServer::acceptConnections() {
 
     std::thread client_thread([client_fd, this]() {
       ClientConnection client_con(client_fd, m_config);
-      client_con.handleClient();
+      client_con.handleConnection();
     });
     client_thread.detach();
   }

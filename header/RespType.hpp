@@ -95,7 +95,7 @@ public:
     if (value.empty()) {
       return serialized_string + "-1" + CRLF;
     }
-    serialized_string += std::to_string(value.size());
+    serialized_string += std::to_string(value.size()) + CRLF;
     for (const auto &element : value) {
       serialized_string += element->serialize();
     }

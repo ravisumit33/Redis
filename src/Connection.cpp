@@ -1,4 +1,4 @@
-#include "ClientConnection.hpp"
+#include "Connection.hpp"
 #include "AppConfig.hpp"
 #include "Command.hpp"
 #include "RespType.hpp"
@@ -14,13 +14,12 @@
 #include <sys/socket.h>
 #include <utility>
 
-ClientConnection::ClientConnection(const unsigned socket_fd,
-                                   const AppConfig &config)
+Connection::Connection(const unsigned socket_fd, const AppConfig &config)
     : m_socket_fd(socket_fd), m_config(config) {}
 
-ClientConnection::~ClientConnection() { close(m_socket_fd); }
+Connection::~Connection() { close(m_socket_fd); }
 
-std::string ClientConnection::readFromSocket() {
+std::string Connection::readFromSocket() const {
   char buffer[1024];
   ssize_t bytes_received = recv(m_socket_fd, buffer, sizeof(buffer) - 1, 0);
   if (bytes_received <= 0) {
@@ -30,40 +29,13 @@ std::string ClientConnection::readFromSocket() {
   return std::string(buffer);
 }
 
-void ClientConnection::writeToSocket(const std::string &data) {
+void Connection::writeToSocket(const std::string &data) const {
   std::cout << "Sent: " << data << std::endl;
   send(m_socket_fd, data.c_str(), data.length(), 0);
 }
 
-void ClientConnection::handleClient() {
-  try {
-    while (true) {
-      std::string data = readFromSocket();
-      if (data.empty()) {
-        std::cout << "Client disconnected" << std::endl;
-        break;
-      }
-
-      std::cout << "Received: " << data << std::endl;
-
-      std::stringstream ss(data);
-      try {
-        auto [command, args] = parseCommand(ss);
-        auto response = command->execute(std::move(args), m_config);
-        writeToSocket(response->serialize());
-      } catch (const std::exception &ex) {
-        std::cerr << "Exception occurred: " << ex.what() << std::endl;
-        RespError errResponse("Unknown command");
-        writeToSocket(errResponse.serialize());
-      }
-    }
-  } catch (const std::exception &exp) {
-    std::cerr << "Error handling client: " << exp.what() << std::endl;
-  }
-}
-
 std::pair<Command *, std::vector<std::unique_ptr<RespType>>>
-ClientConnection::parseCommand(std::istream &in) {
+Connection::parseCommand(std::istream &in) const {
   char type;
   in.get(type);
   if (!in) {
@@ -96,4 +68,38 @@ ClientConnection::parseCommand(std::istream &in) {
   command_args.erase(command_args.begin());
 
   return {command, std::move(command_args)};
+}
+
+void ClientConnection::handleConnection() {
+  try {
+    while (true) {
+      std::string data = readFromSocket();
+      if (data.empty()) {
+        std::cout << "Client disconnected" << std::endl;
+        break;
+      }
+
+      std::cout << "Received: " << data << std::endl;
+
+      std::stringstream ss(data);
+      try {
+        auto [command, args] = parseCommand(ss);
+        auto response = command->execute(std::move(args), getConfig());
+        writeToSocket(response->serialize());
+      } catch (const std::exception &ex) {
+        std::cerr << "Exception occurred: " << ex.what() << std::endl;
+        RespError errResponse("Unknown command");
+        writeToSocket(errResponse.serialize());
+      }
+    }
+  } catch (const std::exception &exp) {
+    std::cerr << "Error handling client: " << exp.what() << std::endl;
+  }
+}
+
+void ServerConnection::handleConnection() {
+  auto array = std::make_unique<RespArray>();
+  auto init_msg = std::make_unique<RespBulkString>("PING");
+  array->add(std::move(init_msg));
+  writeToSocket(array->serialize());
 }
