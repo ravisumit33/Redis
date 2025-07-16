@@ -4,15 +4,55 @@
 #include "Registrar.hpp"
 #include "Registry.hpp"
 #include "RespType.hpp"
+#include <array>
 #include <memory>
 #include <vector>
 
 class Command {
 public:
   virtual ~Command() = default;
-  virtual std::vector<std::unique_ptr<RespType>>
+
+  enum Type { ECHO, PING, SET, GET, INFO, REPLCONF, PSYNC };
+
+  std::vector<std::unique_ptr<RespType>>
   execute(std::vector<std::unique_ptr<RespType>> args,
-          const AppConfig &config) = 0;
+          const AppConfig &config) {
+    bool args_valid = validateArgs(args);
+    if (!args_valid) {
+
+      std::vector<std::unique_ptr<RespType>> result;
+      result.push_back(std::make_unique<RespError>("Invalid args"));
+      return result;
+    }
+    return executeImpl(std::move(args), config);
+  }
+
+  Type getType() const { return m_type; }
+
+  bool isWriteCommand() const;
+
+protected:
+  Command(Type t) : m_type(t) {}
+
+private:
+  bool validateArgs(const std::vector<std::unique_ptr<RespType>> &args) {
+    size_t nargs = args.size();
+    for (int i = 0; i < nargs; ++i) {
+      if (args[i]->getType() != RespType::BULK_STRING) {
+        return false;
+      }
+    }
+    return validateArgsImpl(args);
+  }
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+              const AppConfig &config) = 0;
+
+  virtual bool
+  validateArgsImpl(const std::vector<std::unique_ptr<RespType>> &args) = 0;
+
+  Type m_type;
 };
 
 using CommandRegistry = Registry<std::string, Command>;
@@ -22,70 +62,119 @@ using CommandRegistrar = Registrar<std::string, Command, T>;
 
 class EchoCommand : public Command {
 public:
-  virtual std::vector<std::unique_ptr<RespType>>
-  execute(std::vector<std::unique_ptr<RespType>> args,
-          const AppConfig &config) override;
+  EchoCommand() : Command(ECHO) {}
 
 private:
   static CommandRegistrar<EchoCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+              const AppConfig &config) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 1;
+  }
 };
 
 class PingCommand : public Command {
 public:
-  virtual std::vector<std::unique_ptr<RespType>>
-  execute(std::vector<std::unique_ptr<RespType>> args,
-          const AppConfig &config) override;
+  PingCommand() : Command(PING) {}
 
 private:
   static CommandRegistrar<PingCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+              const AppConfig &config) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 0;
+  }
 };
 
 class SetCommand : public Command {
 public:
-  virtual std::vector<std::unique_ptr<RespType>>
-  execute(std::vector<std::unique_ptr<RespType>> args,
-          const AppConfig &config) override;
+  SetCommand() : Command(SET) {}
 
 private:
   static CommandRegistrar<SetCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+              const AppConfig &config) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 2 || args.size() == 4;
+  }
 };
 
 class GetCommand : public Command {
 public:
-  virtual std::vector<std::unique_ptr<RespType>>
-  execute(std::vector<std::unique_ptr<RespType>> args,
-          const AppConfig &config) override;
+  GetCommand() : Command(GET) {}
 
 private:
   static CommandRegistrar<GetCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+              const AppConfig &config) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 1;
+  }
 };
 
 class InfoCommand : public Command {
 public:
-  virtual std::vector<std::unique_ptr<RespType>>
-  execute(std::vector<std::unique_ptr<RespType>> args,
-          const AppConfig &config) override;
+  InfoCommand() : Command(INFO) {}
 
 private:
   static CommandRegistrar<InfoCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+              const AppConfig &config) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 1;
+  }
 };
 
 class ReplConfCommand : public Command {
 public:
-  virtual std::vector<std::unique_ptr<RespType>>
-  execute(std::vector<std::unique_ptr<RespType>> args,
-          const AppConfig &config) override;
+  ReplConfCommand() : Command(REPLCONF) {}
 
 private:
   static CommandRegistrar<ReplConfCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+              const AppConfig &config) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return true;
+  }
 };
 
 class PsyncCommand : public Command {
 public:
-  virtual std::vector<std::unique_ptr<RespType>>
-  execute(std::vector<std::unique_ptr<RespType>> args,
-          const AppConfig &config) override;
+  PsyncCommand() : Command(PSYNC) {}
 
 private:
   static CommandRegistrar<PsyncCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+              const AppConfig &config) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 2;
+  }
 };

@@ -1,45 +1,40 @@
 #include "Command.hpp"
 #include "AppConfig.hpp"
 #include "RedisStore.hpp"
+#include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "utils.hpp"
+#include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 
+bool Command::isWriteCommand() const {
+  static std::array<Type, 1> write_commands = {SET};
+  return std::any_of(write_commands.begin(), write_commands.end(),
+                     [this](Type &t) { return t == getType(); });
+}
+
 CommandRegistrar<EchoCommand> EchoCommand::registrar("ECHO");
 
 std::vector<std::unique_ptr<RespType>>
-EchoCommand::execute(std::vector<std::unique_ptr<RespType>> args,
-                     const AppConfig &config) {
+EchoCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+                         const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
-  if (args.size() != 1) {
-    result.push_back(std::make_unique<RespError>("Unexpected number of args"));
-    return result;
-  }
-
-  if (args[0]->getType() != RespType::BULK_STRING) {
-    result.push_back(std::make_unique<RespError>("Unexpected argument type"));
-    return result;
-  }
-
-  result.push_back(std::move(args[0]));
+  result.push_back(std::move(args.at(0)));
   return result;
 }
 
 CommandRegistrar<PingCommand> PingCommand::registrar("PING");
 
 std::vector<std::unique_ptr<RespType>>
-PingCommand::execute(std::vector<std::unique_ptr<RespType>> args,
-                     const AppConfig &config) {
+PingCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+                         const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
-  if (args.size() != 0) {
-    result.push_back(std::make_unique<RespError>("Unexpected number of args"));
-    return result;
-  }
-
   result.push_back(std::make_unique<RespBulkString>("PONG"));
   return result;
 }
@@ -47,32 +42,18 @@ PingCommand::execute(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<SetCommand> SetCommand::registrar("SET");
 
 std::vector<std::unique_ptr<RespType>>
-SetCommand::execute(std::vector<std::unique_ptr<RespType>> args,
-                    const AppConfig &config) {
+SetCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+                        const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
-  if (args.size() != 4 && args.size() != 2) {
-    result.push_back(std::make_unique<RespError>("Unexpected number of args"));
-    return result;
-  }
 
   size_t nargs = args.size();
-
-  for (int i = 0; i < nargs; ++i) {
-    if (args[i]->getType() != RespType::BULK_STRING) {
-      result.push_back(
-          std::make_unique<RespError>("Unexpected arguments type"));
-      return result;
-    }
-  }
-
   auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
   auto value = static_cast<RespBulkString &>(*args.at(1)).getValue();
-
   std::optional<std::chrono::milliseconds> expiry = std::nullopt;
   if (nargs == 4) {
     auto expiryArgName = static_cast<RespBulkString &>(*args.at(2)).getValue();
     if (expiryArgName != "px") {
-      result.push_back(std::make_unique<RespError>("Unexpected syntax"));
+      result.push_back(std::make_unique<RespError>("Unsupported command arg"));
     }
     try {
       auto expiryDelta =
@@ -92,18 +73,9 @@ SetCommand::execute(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<GetCommand> GetCommand::registrar("GET");
 
 std::vector<std::unique_ptr<RespType>>
-GetCommand::execute(std::vector<std::unique_ptr<RespType>> args,
-                    const AppConfig &config) {
+GetCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+                        const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
-  if (args.size() != 1) {
-    result.push_back(std::make_unique<RespError>("Unexpected number of args"));
-    return result;
-  }
-
-  if (args[0]->getType() != RespType::BULK_STRING) {
-    result.push_back(std::make_unique<RespError>("Unexpected argument type"));
-    return result;
-  }
 
   auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
 
@@ -123,18 +95,9 @@ GetCommand::execute(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<InfoCommand> InfoCommand::registrar("INFO");
 
 std::vector<std::unique_ptr<RespType>>
-InfoCommand::execute(std::vector<std::unique_ptr<RespType>> args,
-                     const AppConfig &config) {
+InfoCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+                         const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
-  if (args.size() != 1) {
-    result.push_back(std::make_unique<RespError>("Unexpected number of args"));
-    return result;
-  }
-
-  if (args.at(0)->getType() != RespType::BULK_STRING) {
-    result.push_back(std::make_unique<RespError>("Unexpected argument type"));
-    return result;
-  }
 
   auto arg = static_cast<RespBulkString &>(*args.at(0)).getValue();
   if (arg != "replication") {
@@ -142,12 +105,14 @@ InfoCommand::execute(std::vector<std::unique_ptr<RespType>> args,
     return result;
   }
 
-  if (config.getSlaveMetadata()) {
+  if (config.getSlaveConfig()) {
     result.push_back(std::make_unique<RespBulkString>("role:slave"));
     return result;
   }
   std::string replicationInfo = "role:master";
-  auto [master_replid, master_repl_offset] = *config.getMasterMetadata();
+  auto &master_state = ReplicationManager::getInstance().master();
+  std::string master_replid = master_state.getReplId();
+  uint64_t master_repl_offset = master_state.getReplOffset();
   replicationInfo += std::string("\n") + "master_replid:" + master_replid;
   replicationInfo += std::string("\n") +
                      "master_repl_offset:" + std::to_string(master_repl_offset);
@@ -158,8 +123,8 @@ InfoCommand::execute(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<ReplConfCommand> ReplConfCommand::registrar("REPLCONF");
 
 std::vector<std::unique_ptr<RespType>>
-ReplConfCommand::execute(std::vector<std::unique_ptr<RespType>> args,
-                         const AppConfig &config) {
+ReplConfCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+                             const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
   result.push_back(std::make_unique<RespString>("OK"));
   return result;
@@ -168,10 +133,24 @@ ReplConfCommand::execute(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<PsyncCommand> PsyncCommand::registrar("PSYNC");
 
 std::vector<std::unique_ptr<RespType>>
-PsyncCommand::execute(std::vector<std::unique_ptr<RespType>> args,
-                      const AppConfig &config) {
+PsyncCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+                          const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
-  auto [master_replid, master_repl_offset] = *config.getMasterMetadata();
+
+  auto arg = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  if (arg != "?") {
+    result.push_back(std::make_unique<RespError>("Unsupported command arg"));
+    return result;
+  }
+  arg = static_cast<RespBulkString &>(*args.at(1)).getValue();
+  if (arg != "-1") {
+    result.push_back(std::make_unique<RespError>("Unsupported command arg"));
+    return result;
+  }
+
+  auto &master_state = ReplicationManager::getInstance().master();
+  std::string master_replid = master_state.getReplId();
+  uint64_t master_repl_offset = master_state.getReplOffset();
   result.push_back(
       std::make_unique<RespString>("FULLRESYNC " + master_replid + " " +
                                    std::to_string(master_repl_offset)));

@@ -14,7 +14,7 @@ RedisServer::RedisServer(const AppConfig &config) : m_config(config) {}
 
 void RedisServer::start() {
 
-  if (auto smetadata = m_config.getSlaveMetadata(); smetadata) {
+  if (auto smetadata = m_config.getSlaveConfig(); smetadata) {
     auto [master_host, master_port] = *smetadata;
     std::cout << "Attaching slave to master: " << master_host << " "
               << master_port << std::endl;
@@ -35,10 +35,10 @@ void RedisServer::start() {
       throw std::runtime_error("Failed to connect to master");
     }
 
-    std::cout << "Slave connected to master" << std::endl;
+    std::cout << "Slave connected to master at: " << m_master_fd << std::endl;
 
-    std::thread master_thread([this]() {
-      ServerConnection master_con(m_master_fd, m_config);
+    std::thread master_thread([&fd = m_master_fd, &config = m_config]() {
+      ServerConnection master_con(fd, config);
       master_con.handleConnection();
     });
     master_thread.detach();
@@ -117,10 +117,10 @@ void RedisServer::acceptConnections() {
       continue;
     }
 
-    std::cout << "Client connected" << std::endl;
+    std::cout << "Client connected at: " << client_fd << std::endl;
 
-    std::thread client_thread([client_fd, this]() {
-      ClientConnection client_con(client_fd, m_config);
+    std::thread client_thread([client_fd, &config = m_config]() {
+      ClientConnection client_con(client_fd, config);
       client_con.handleConnection();
     });
     client_thread.detach();

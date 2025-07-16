@@ -1,9 +1,11 @@
 #include "Connection.hpp"
 #include "AppConfig.hpp"
 #include "Command.hpp"
+#include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "RespTypeParser.hpp"
 #include "unistd.h"
+#include "utils.hpp"
 #include <exception>
 #include <iostream>
 #include <istream>
@@ -20,21 +22,6 @@ Connection::Connection(const unsigned socket_fd, const AppConfig &config)
     : m_socket_fd(socket_fd), m_config(config) {}
 
 Connection::~Connection() { close(m_socket_fd); }
-
-std::string Connection::readFromSocket() const {
-  char buffer[1024];
-  ssize_t bytes_received = recv(m_socket_fd, buffer, sizeof(buffer) - 1, 0);
-  if (bytes_received <= 0) {
-    return "";
-  }
-  buffer[bytes_received] = '\0';
-  return std::string(buffer);
-}
-
-void Connection::writeToSocket(const std::string &data) const {
-  std::cout << "Sent: " << data << std::endl;
-  send(m_socket_fd, data.c_str(), data.length(), 0);
-}
 
 std::pair<Command *, std::vector<std::unique_ptr<RespType>>>
 Connection::parseCommand(std::istream &in) const {
@@ -72,28 +59,53 @@ Connection::parseCommand(std::istream &in) const {
   return {command, std::move(command_args)};
 }
 
+ClientConnection::~ClientConnection() {
+  if (m_is_slave) {
+    auto &master_state = ReplicationManager::getInstance().master();
+    master_state.removeSlave(getSocketFd());
+  }
+}
+
+void ClientConnection::addAsSlave() {
+  auto &master_state = ReplicationManager::getInstance().master();
+  master_state.addSlave(getSocketFd());
+  m_is_slave = true;
+}
+
 void ClientConnection::handleConnection() {
   try {
     while (true) {
-      std::string data = readFromSocket();
+      std::string data = readFromSocket(getSocketFd());
       if (data.empty()) {
         std::cout << "Client disconnected" << std::endl;
         break;
       }
 
-      std::cout << "Received: " << data << std::endl;
+      std::cout << "Received: " << data << " from " << getSocketFd()
+                << std::endl;
 
       std::stringstream ss(data);
       try {
         auto [command, args] = parseCommand(ss);
         auto responses = command->execute(std::move(args), getConfig());
         for (const auto &response : responses) {
-          writeToSocket(response->serialize());
+          writeToSocket(getSocketFd(), response->serialize());
+        }
+
+        if (command->getType() == Command::REPLCONF) {
+          addAsSlave();
+        }
+
+        if (getConfig().isMaster() && command->isWriteCommand()) {
+          auto &master_state = ReplicationManager::getInstance().master();
+          if (master_state.hasSlaves()) {
+            master_state.propagateToSlave(data);
+          }
         }
       } catch (const std::exception &ex) {
         std::cerr << "Exception occurred: " << ex.what() << std::endl;
         RespError errResponse("Unknown command");
-        writeToSocket(errResponse.serialize());
+        writeToSocket(getSocketFd(), errResponse.serialize());
       }
     }
   } catch (const std::exception &exp) {
@@ -107,11 +119,13 @@ void ServerConnection::sendCommand(
   for (auto &resp_type_ptr : args) {
     array->add(std::move(resp_type_ptr));
   }
-  writeToSocket(array->serialize());
+  writeToSocket(getSocketFd(), array->serialize());
 }
 
 void ServerConnection::validateResponse(auto validate) {
-  auto servResponse = readFromSocket();
+  auto servResponse = readFromSocket(getSocketFd());
+  std::cout << "Received: " << servResponse
+            << " from master at: " << getSocketFd() << std::endl;
   std::istringstream in(servResponse);
   char type;
   in.get(type);

@@ -1,27 +1,14 @@
 #include "AppConfig.hpp"
 #include "ArgParser.hpp"
 #include "RedisServer.hpp"
+#include "ReplicationState.hpp"
 #include <cstddef>
 #include <exception>
-#include <iomanip>
 #include <iostream>
+#include <memory>
 #include <optional>
-#include <random>
 #include <sstream>
 #include <string>
-
-std::string generateRandomHexId() {
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_int_distribution<uint8_t> dis(0, 255);
-
-  std::ostringstream oss;
-  for (size_t i = 0; i < 20; ++i) {
-    oss << std::hex << std::setw(2) << std::setfill('0')
-        << static_cast<int>(dis(gen));
-  }
-  return oss.str();
-}
 
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
@@ -39,23 +26,22 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  std::optional<MasterMetadata> mmetadata = std::nullopt;
-  std::optional<SlaveMetadata> smetadata = std::nullopt;
+  std::optional<SlaveConfig> slave_config = std::nullopt;
   auto replicaof = parser.get<std::string>("replicaof");
   if (replicaof.empty()) {
-    mmetadata = {.master_replid = generateRandomHexId(),
-                 .master_repl_offset = 0};
+    ReplicationManager::getInstance().initAsMaster();
   } else {
     std::string master_host;
     unsigned master_port;
     std::istringstream ss(replicaof);
     ss >> master_host >> master_port;
-    smetadata = {.master_host = master_host, .master_port = master_port};
+    slave_config = {.master_host = master_host, .master_port = master_port};
+    ReplicationManager::getInstance().initAsSlave();
   }
 
   AppConfig config(
       static_cast<unsigned>(std::stoul(parser.get<std::string>("port"))),
-      mmetadata, smetadata);
+      slave_config);
 
   try {
     RedisServer server(config);

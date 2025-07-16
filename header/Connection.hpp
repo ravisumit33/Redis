@@ -4,28 +4,27 @@
 #include "Command.hpp"
 #include <istream>
 #include <memory>
-#include <string>
 #include <vector>
 
 class Connection {
 public:
   Connection(const unsigned socket_fd, const AppConfig &config);
+
   ~Connection();
+
   virtual void handleConnection() = 0;
 
 protected:
-  std::string readFromSocket() const;
-
-  void writeToSocket(const std::string &data) const;
-
   std::pair<Command *, std::vector<std::unique_ptr<RespType>>>
   parseCommand(std::istream &in) const;
 
   const AppConfig &getConfig() const { return m_config; }
 
+  const unsigned getSocketFd() const { return m_socket_fd; }
+
 private:
   const unsigned m_socket_fd;
-  AppConfig m_config;
+  const AppConfig &m_config;
 };
 
 class ClientConnection : public Connection {
@@ -34,6 +33,13 @@ public:
       : Connection(socket_fd, config) {}
 
   virtual void handleConnection() override;
+
+  ~ClientConnection();
+
+private:
+  void addAsSlave();
+
+  bool m_is_slave;
 };
 
 class ServerConnection : public Connection {

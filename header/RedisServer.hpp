@@ -10,7 +10,7 @@ public:
   ~RedisServer();
 
 private:
-  AppConfig m_config;
+  const AppConfig &m_config;
   bool m_isRunning = false;
   int m_server_fd = -1;
   int m_master_fd = -1;
