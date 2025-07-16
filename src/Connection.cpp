@@ -85,27 +85,29 @@ void ClientConnection::handleConnection() {
                 << std::endl;
 
       std::stringstream ss(data);
-      try {
-        auto [command, args] = parseCommand(ss);
-        auto responses = command->execute(std::move(args), getConfig());
-        for (const auto &response : responses) {
-          writeToSocket(getSocketFd(), response->serialize());
-        }
-
-        if (command->getType() == Command::REPLCONF) {
-          addAsSlave();
-        }
-
-        if (getConfig().isMaster() && command->isWriteCommand()) {
-          auto &master_state = ReplicationManager::getInstance().master();
-          if (master_state.hasSlaves()) {
-            master_state.propagateToSlave(data);
+      while (ss >> std::ws, ss.peek() != std::char_traits<char>::eof()) {
+        try {
+          auto [command, args] = parseCommand(ss);
+          auto responses = command->execute(std::move(args), getConfig());
+          for (const auto &response : responses) {
+            writeToSocket(getSocketFd(), response->serialize());
           }
+
+          if (command->getType() == Command::REPLCONF) {
+            addAsSlave();
+          }
+
+          if (getConfig().isMaster() && command->isWriteCommand()) {
+            auto &master_state = ReplicationManager::getInstance().master();
+            if (master_state.hasSlaves()) {
+              master_state.propagateToSlave(data);
+            }
+          }
+        } catch (const std::exception &ex) {
+          std::cerr << "Exception occurred: " << ex.what() << std::endl;
+          RespError errResponse("Unknown command");
+          writeToSocket(getSocketFd(), errResponse.serialize());
         }
-      } catch (const std::exception &ex) {
-        std::cerr << "Exception occurred: " << ex.what() << std::endl;
-        RespError errResponse("Unknown command");
-        writeToSocket(getSocketFd(), errResponse.serialize());
       }
     }
   } catch (const std::exception &exp) {
@@ -214,4 +216,25 @@ void ServerConnection::handShake() {
 void ServerConnection::handleConnection() {
   handShake();
   std::cout << "Handshake done" << std::endl;
+
+  try {
+    while (true) {
+      std::string data = readFromSocket(getSocketFd());
+      if (data.empty()) {
+        std::cout << "Server disconnected" << std::endl;
+        break;
+      }
+
+      std::cout << "Received: " << data << " from " << getSocketFd()
+                << std::endl;
+
+      std::stringstream ss(data);
+      while (ss >> std::ws, ss.peek() != std::char_traits<char>::eof()) {
+        auto [command, args] = parseCommand(ss);
+        command->execute(std::move(args), getConfig());
+      }
+    }
+  } catch (const std::exception &exp) {
+    std::cerr << "Error handling server: " << exp.what() << std::endl;
+  }
 }
