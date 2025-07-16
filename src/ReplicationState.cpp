@@ -8,7 +8,9 @@ void MasterState::propagateToSlave(const std::string &data) {
   if (!hasSlaves()) {
     throw std::logic_error("No slaves to propagate");
   }
-  writeToSocket(*m_slaves.begin(), data);
+  for (const auto slave : m_slaves) {
+    writeToSocket(slave, data);
+  }
 }
 
 void ReplicationManager::initAsMaster() {

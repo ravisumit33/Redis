@@ -4,7 +4,6 @@
 #include "Registrar.hpp"
 #include "Registry.hpp"
 #include "RespType.hpp"
-#include <array>
 #include <memory>
 #include <vector>
 
