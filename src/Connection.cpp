@@ -6,6 +6,7 @@
 #include "RespTypeParser.hpp"
 #include "unistd.h"
 #include "utils.hpp"
+#include <cstddef>
 #include <exception>
 #include <functional>
 #include <iostream>
@@ -82,7 +83,7 @@ void ClientConnection::handleConnection() {
         break;
       }
 
-      std::cout << "Received: " << data << " from " << getSocketFd()
+      std::cout << "Received: " << data << " from client: " << getSocketFd()
                 << std::endl;
 
       std::stringstream ss(data);
@@ -100,7 +101,7 @@ void ClientConnection::handleConnection() {
             }
           }
 
-          auto responses = command->execute(std::move(args), getConfig());
+          auto responses = command->execute(args, getConfig());
           for (const auto &response : responses) {
             writeToSocket(getSocketFd(), response->serialize());
           }
@@ -134,9 +135,8 @@ void ServerConnection::sendCommand(
 
 void ServerConnection::validateResponse(auto validate) {
   auto servResponse = readFromSocket(getSocketFd());
-  std::cout << "Received: " << servResponse
-            << " with number of bytes: " << servResponse.size()
-            << " from master at: " << getSocketFd() << std::endl;
+  std::cout << "Received: " << servResponse << " from master: " << getSocketFd()
+            << std::endl;
   std::istringstream in(servResponse);
   char type;
   in.get(type);
@@ -164,7 +164,7 @@ void ServerConnection::configureRepl() {
   cmd.push_back(
       std::make_unique<RespBulkString>(std::to_string(getConfig().getPort())));
   sendCommand(std::move(cmd));
-  validateResponse([](const std::string &response, std::istream &in) {
+  validateResponse([](const std::string &response, std::istringstream &in) {
     if (response != "OK") {
       std::cerr << "Expected OK but got " << response << std::endl;
       throw std::runtime_error("Unexpected response from server");
@@ -176,7 +176,7 @@ void ServerConnection::configureRepl() {
   cmd.push_back(std::make_unique<RespBulkString>("capa"));
   cmd.push_back(std::make_unique<RespBulkString>("psync2"));
   sendCommand(std::move(cmd));
-  validateResponse([](const std::string &response, std::istream &in) {
+  validateResponse([](const std::string &response, std::istringstream &in) {
     if (response != "OK") {
       std::cerr << "Expected OK but got " << response << std::endl;
       throw std::runtime_error("Unexpected response from server");
@@ -190,7 +190,7 @@ void ServerConnection::configurePsync() {
   cmd.push_back(std::make_unique<RespBulkString>("?"));
   cmd.push_back(std::make_unique<RespBulkString>("-1"));
   sendCommand(std::move(cmd));
-  validateResponse([this](const std::string &response, std::istream &in) {
+  validateResponse([this](const std::string &response, std::istringstream &in) {
     std::istringstream ss(response);
     ss.exceptions(std::ios::badbit);
     std::string cmd, repl_id;
@@ -220,7 +220,7 @@ void ServerConnection::configurePsync() {
       return true;
     };
 
-    std::reference_wrapper<std::istream> input_stream_ref = in;
+    std::reference_wrapper<std::istringstream> input_stream_ref = in;
 
     if (in.peek() != std::char_traits<char>::eof()) {
       if (!extractRDB(in)) {
@@ -238,13 +238,27 @@ void ServerConnection::configurePsync() {
     std::cout << "RDB extraction done" << std::endl;
 
     auto &input_stream = input_stream_ref.get();
+    std::streampos pos = input_stream.tellg();
+    std::size_t total_bytes_after_handshake =
+        (pos != -1)
+            ? (input_stream.str().size() - static_cast<std::size_t>(pos))
+            : 0;
+    std::size_t bytes_recorded = 0;
     while (input_stream.peek() != std::char_traits<char>::eof()) {
       auto [command, args] = parseCommand(input_stream);
-      auto responses = command->execute(std::move(args), getConfig());
+      auto responses = command->execute(args, getConfig());
       if (command->getType() == Command::REPLCONF) {
         for (const auto &response : responses) {
           writeToSocket(getSocketFd(), response->serialize());
         }
+        std::streampos pos = ss.tellg();
+        std::size_t bytes_remaining =
+            (pos != -1) ? (ss.str().size() - static_cast<std::size_t>(pos)) : 0;
+        std::size_t bytes_read = total_bytes_after_handshake - bytes_remaining;
+        std::size_t new_bytes_read = bytes_read - bytes_recorded;
+        auto &slave_state = ReplicationManager::getInstance().slave();
+        slave_state.addBytesProcessed(new_bytes_read);
+        bytes_recorded += new_bytes_read;
       }
     }
 
@@ -256,7 +270,7 @@ void ServerConnection::handShake() {
   std::vector<std::unique_ptr<RespType>> cmd;
   cmd.push_back(std::make_unique<RespBulkString>("PING"));
   sendCommand(std::move(cmd));
-  validateResponse([](const std::string &response, std::istream &in) {
+  validateResponse([](const std::string &response, std::istringstream &in) {
     if (response != "PONG") {
       std::cerr << "Expected PONG but got " << response << std::endl;
       throw std::runtime_error("Unexpected response from server");
@@ -284,18 +298,29 @@ void ServerConnection::handleConnection() {
         break;
       }
 
-      std::cout << "Received: " << data << " from " << getSocketFd()
+      std::cout << "Received: " << data << " from master: " << getSocketFd()
                 << std::endl;
 
       std::stringstream ss(data);
+      std::size_t total_bytes_received = data.size();
+      std::size_t bytes_recorded = 0;
       while (ss.peek() != std::char_traits<char>::eof()) {
         auto [command, args] = parseCommand(ss);
-        auto responses = command->execute(std::move(args), getConfig());
-        if (command->getType() == Command::REPLCONF) {
-          for (const auto &response : responses) {
-            writeToSocket(getSocketFd(), response->serialize());
+        auto responses = command->execute(args, getConfig());
+        for (const auto &response : responses) {
+          auto serialized_response = response->serialize();
+          if (command->getType() == Command::REPLCONF) {
+            writeToSocket(getSocketFd(), serialized_response);
           }
         }
+        std::streampos pos = ss.tellg();
+        std::size_t bytes_remaining =
+            (pos != -1) ? (ss.str().size() - static_cast<std::size_t>(pos)) : 0;
+        std::size_t bytes_read = total_bytes_received - bytes_remaining;
+        std::size_t new_bytes_read = bytes_read - bytes_recorded;
+        auto &slave_state = ReplicationManager::getInstance().slave();
+        slave_state.addBytesProcessed(new_bytes_read);
+        bytes_recorded += new_bytes_read;
       }
     }
   } catch (const std::exception &exp) {

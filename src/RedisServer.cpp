@@ -125,11 +125,12 @@ void RedisServer::acceptConnections() {
 
     std::cout << "Client connected at: " << client_fd << std::endl;
 
-    if (!m_init_done) {
-      auto respErr = RespError("Server still loading...");
-      writeToSocket(client_fd, respErr.serialize());
-      continue;
-    }
+    // TODO: Check if it is required
+    // if (!m_init_done) {
+    //   auto respErr = RespError("Server still loading...");
+    //   writeToSocket(client_fd, respErr.serialize());
+    //   continue;
+    // }
 
     std::thread client_thread([client_fd, &config = m_config]() {
       ClientConnection client_con(client_fd, config);

@@ -14,7 +14,7 @@ public:
   enum Type { ECHO, PING, SET, GET, INFO, REPLCONF, PSYNC };
 
   std::vector<std::unique_ptr<RespType>>
-  execute(std::vector<std::unique_ptr<RespType>> args,
+  execute(const std::vector<std::unique_ptr<RespType>> &args,
           const AppConfig &config) {
     bool args_valid = validateArgs(args);
     if (!args_valid) {
@@ -23,7 +23,7 @@ public:
       result.push_back(std::make_unique<RespError>("Invalid args"));
       return result;
     }
-    return executeImpl(std::move(args), config);
+    return executeImpl(args, config);
   }
 
   Type getType() const { return m_type; }
@@ -45,7 +45,7 @@ private:
   }
 
   virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
               const AppConfig &config) = 0;
 
   virtual bool
@@ -67,7 +67,7 @@ private:
   static CommandRegistrar<EchoCommand> registrar;
 
   virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
               const AppConfig &config) override;
 
   virtual bool validateArgsImpl(
@@ -84,7 +84,7 @@ private:
   static CommandRegistrar<PingCommand> registrar;
 
   virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
               const AppConfig &config) override;
 
   virtual bool validateArgsImpl(
@@ -101,7 +101,7 @@ private:
   static CommandRegistrar<SetCommand> registrar;
 
   virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
               const AppConfig &config) override;
 
   virtual bool validateArgsImpl(
@@ -118,7 +118,7 @@ private:
   static CommandRegistrar<GetCommand> registrar;
 
   virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
               const AppConfig &config) override;
 
   virtual bool validateArgsImpl(
@@ -135,7 +135,7 @@ private:
   static CommandRegistrar<InfoCommand> registrar;
 
   virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
               const AppConfig &config) override;
 
   virtual bool validateArgsImpl(
@@ -152,7 +152,7 @@ private:
   static CommandRegistrar<ReplConfCommand> registrar;
 
   virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
               const AppConfig &config) override;
 
   virtual bool validateArgsImpl(
@@ -169,7 +169,7 @@ private:
   static CommandRegistrar<PsyncCommand> registrar;
 
   virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(std::vector<std::unique_ptr<RespType>> args,
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
               const AppConfig &config) override;
 
   virtual bool validateArgsImpl(

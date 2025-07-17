@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -35,11 +36,25 @@ private:
   uint64_t m_repl_offset;
   std::unordered_set<unsigned> m_slaves;
   mutable std::mutex mMutex;
+
+  MasterState(const MasterState &state) = delete;
+  MasterState &operator=(const MasterState &) = delete;
 };
 
 class SlaveState {
 public:
   SlaveState() = default;
+
+  void addBytesProcessed(std::size_t bytes) { m_bytes_processed += bytes; }
+
+  std::size_t getBytesProcessed() const { return m_bytes_processed; }
+
+private:
+  std::size_t m_bytes_processed = 0;
+
+  SlaveState(const SlaveState &state) = delete;
+
+  SlaveState &operator=(const SlaveState &) = delete;
 };
 
 class ReplicationManager {

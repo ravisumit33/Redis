@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -22,17 +23,17 @@ bool Command::isWriteCommand() const {
 CommandRegistrar<EchoCommand> EchoCommand::registrar("ECHO");
 
 std::vector<std::unique_ptr<RespType>>
-EchoCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+EchoCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                          const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
-  result.push_back(std::move(args.at(0)));
+  result.push_back(args.at(0)->clone());
   return result;
 }
 
 CommandRegistrar<PingCommand> PingCommand::registrar("PING");
 
 std::vector<std::unique_ptr<RespType>>
-PingCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+PingCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                          const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
   result.push_back(std::make_unique<RespBulkString>("PONG"));
@@ -42,7 +43,7 @@ PingCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<SetCommand> SetCommand::registrar("SET");
 
 std::vector<std::unique_ptr<RespType>>
-SetCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+SetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                         const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
 
@@ -73,7 +74,7 @@ SetCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<GetCommand> GetCommand::registrar("GET");
 
 std::vector<std::unique_ptr<RespType>>
-GetCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+GetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                         const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
 
@@ -95,7 +96,7 @@ GetCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<InfoCommand> InfoCommand::registrar("INFO");
 
 std::vector<std::unique_ptr<RespType>>
-InfoCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+InfoCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                          const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
 
@@ -123,7 +124,7 @@ InfoCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<ReplConfCommand> ReplConfCommand::registrar("REPLCONF");
 
 std::vector<std::unique_ptr<RespType>>
-ReplConfCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+ReplConfCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                              const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
   if (config.isMaster()) {
@@ -135,9 +136,12 @@ ReplConfCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
       result.push_back(std::make_unique<RespError>("Unsupported command arg"));
     } else {
       auto resp_array = std::make_unique<RespArray>();
+      auto &slave_state = ReplicationManager::getInstance().slave();
+      std::size_t bytes_processed = slave_state.getBytesProcessed();
       resp_array->add(std::make_unique<RespBulkString>("REPLCONF"))
           ->add(std::make_unique<RespBulkString>("ACK"))
-          ->add(std::make_unique<RespBulkString>("0"));
+          ->add(std::make_unique<RespBulkString>(
+              std::to_string(bytes_processed)));
       result.push_back(std::move(resp_array));
     }
   }
@@ -147,7 +151,7 @@ ReplConfCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
 CommandRegistrar<PsyncCommand> PsyncCommand::registrar("PSYNC");
 
 std::vector<std::unique_ptr<RespType>>
-PsyncCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
+PsyncCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                           const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
 
