@@ -126,7 +126,21 @@ std::vector<std::unique_ptr<RespType>>
 ReplConfCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
                              const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
-  result.push_back(std::make_unique<RespString>("OK"));
+  if (config.isMaster()) {
+    result.push_back(std::make_unique<RespString>("OK"));
+  } else {
+    auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
+    auto arg2 = static_cast<RespBulkString &>(*args.at(1)).getValue();
+    if (arg1 != "GETACK" || arg2 != "*") {
+      result.push_back(std::make_unique<RespError>("Unsupported command arg"));
+    } else {
+      auto resp_array = std::make_unique<RespArray>();
+      resp_array->add(std::make_unique<RespBulkString>("REPLCONF"))
+          ->add(std::make_unique<RespBulkString>("ACK"))
+          ->add(std::make_unique<RespBulkString>("0"));
+      result.push_back(std::move(resp_array));
+    }
+  }
   return result;
 }
 
@@ -161,6 +175,6 @@ PsyncCommand::executeImpl(std::vector<std::unique_ptr<RespType>> args,
       "2d62617365c000fff06e3bfec0ff5aa2";
 
   const std::string empty_rdb_binary = hexToBinary(empty_rdb_hex);
-  result.push_back(std::make_unique<RespRDB>(empty_rdb_binary));
+  result.push_back(std::make_unique<RespBulkString>(empty_rdb_binary, false));
   return result;
 }

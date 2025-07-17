@@ -65,14 +65,16 @@ std::unique_ptr<RespType> RespBulkStringParser::parse(std::istream &in) {
     throw std::runtime_error("Invalid bulk string");
   }
 
-  char cr, lf;
-  in.get(cr);
-  in.get(lf);
-  if (cr != '\r' || lf != '\n') {
-    throw std::runtime_error("Invalid bulk string");
+  if (m_parseLastCrlf) {
+    char cr, lf;
+    in.get(cr);
+    in.get(lf);
+    if (cr != '\r' || lf != '\n') {
+      throw std::runtime_error("Invalid bulk string");
+    }
   }
 
-  return std::make_unique<RespBulkString>(std::move(val));
+  return std::make_unique<RespBulkString>(std::move(val), m_parseLastCrlf);
 }
 
 RespParserRegistrar<RespErrorParser> RespErrorParser::registrar('-');

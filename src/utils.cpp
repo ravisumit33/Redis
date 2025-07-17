@@ -51,7 +51,7 @@ std::string readFromSocket(unsigned socket_fd) {
     return "";
   }
   buffer[bytes_received] = '\0';
-  return std::string(buffer);
+  return std::string(buffer, bytes_received);
 }
 
 void writeToSocket(unsigned socket_fd, const std::string &data) {

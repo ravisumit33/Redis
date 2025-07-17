@@ -2,6 +2,7 @@
 
 #include "AppConfig.hpp"
 #include "Command.hpp"
+#include <functional>
 #include <istream>
 #include <memory>
 #include <vector>
@@ -44,8 +45,9 @@ private:
 
 class ServerConnection : public Connection {
 public:
-  ServerConnection(const unsigned socket_fd, const AppConfig &config)
-      : Connection(socket_fd, config) {}
+  ServerConnection(const unsigned socket_fd, const AppConfig &config,
+                   const std::function<void()> &ready_callback)
+      : Connection(socket_fd, config), m_ready_callback(ready_callback) {}
 
   virtual void handleConnection() override;
 
@@ -59,4 +61,6 @@ private:
   void configurePsync();
 
   void handShake();
+
+  std::function<void()> m_ready_callback;
 };

@@ -54,8 +54,11 @@ public:
     return RespType::BULK_STRING;
   }
 
+  void disableLastCrlfParsing() { m_parseLastCrlf = false; }
+
 private:
   static RespParserRegistrar<RespBulkStringParser> registrar;
+  bool m_parseLastCrlf = true;
 };
 
 class RespErrorParser : public RespTypeParser {

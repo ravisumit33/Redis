@@ -1,6 +1,8 @@
 #include "RedisServer.hpp"
 #include "AppConfig.hpp"
 #include "Connection.hpp"
+#include "RespType.hpp"
+#include "utils.hpp"
 #include <arpa/inet.h>
 #include <cassert>
 #include <iostream>
@@ -37,11 +39,15 @@ void RedisServer::start() {
 
     std::cout << "Slave connected to master at: " << m_master_fd << std::endl;
 
-    std::thread master_thread([&fd = m_master_fd, &config = m_config]() {
-      ServerConnection master_con(fd, config);
-      master_con.handleConnection();
-    });
+    auto ready_callback = [this]() { m_init_done = true; };
+    std::thread master_thread(
+        [&fd = m_master_fd, &config = m_config, &callback = ready_callback]() {
+          ServerConnection master_con(fd, config, callback);
+          master_con.handleConnection();
+        });
     master_thread.detach();
+  } else {
+    m_init_done = true;
   }
 
   setupSocket();
@@ -118,6 +124,12 @@ void RedisServer::acceptConnections() {
     }
 
     std::cout << "Client connected at: " << client_fd << std::endl;
+
+    if (!m_init_done) {
+      auto respErr = RespError("Server still loading...");
+      writeToSocket(client_fd, respErr.serialize());
+      continue;
+    }
 
     std::thread client_thread([client_fd, &config = m_config]() {
       ClientConnection client_con(client_fd, config);

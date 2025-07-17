@@ -28,38 +28,38 @@ protected:
 
 class RespString : public RespType {
 public:
-  RespString(std::string val) : RespType(STRING), value(std::move(val)) {}
+  RespString(std::string val) : RespType(STRING), m_value(std::move(val)) {}
 
   virtual std::unique_ptr<RespType> clone() override {
     return std::make_unique<RespString>(*this);
   }
 
-  std::string getValue() const { return value; }
+  std::string getValue() const { return m_value; }
 
   virtual std::string serialize() override {
     return std::string("+") + getValue() + CRLF;
   }
 
 private:
-  std::string value;
+  std::string m_value;
 };
 
 class RespInt : public RespType {
 public:
-  RespInt(int64_t val) : RespType(INTEGER), value(val) {}
+  RespInt(int64_t val) : RespType(INTEGER), m_value(val) {}
 
   virtual std::unique_ptr<RespType> clone() override {
     return std::make_unique<RespInt>(*this);
   }
 
-  int64_t getValue() const { return value; }
+  int64_t getValue() const { return m_value; }
 
   virtual std::string serialize() override {
     return std::string(":") + std::to_string(getValue()) + CRLF;
   }
 
 private:
-  int64_t value;
+  int64_t m_value;
 };
 
 class RespArray : public RespType {
@@ -67,8 +67,8 @@ public:
   RespArray() : RespType(ARRAY) {}
 
   RespArray(const RespArray &other) : RespArray() {
-    for (const auto &val : other.value) {
-      value.push_back(val->clone());
+    for (const auto &val : other.m_value) {
+      m_value.push_back(val->clone());
     }
   }
 
@@ -77,87 +77,82 @@ public:
   }
 
   RespArray *add(std::unique_ptr<RespType> item) {
-    value.push_back(std::move(item));
+    m_value.push_back(std::move(item));
     return this;
   }
 
-  const RespType *at(size_t idx) { return value.at(idx).get(); }
+  const RespType *at(size_t idx) { return m_value.at(idx).get(); }
 
   std::vector<const RespType *> getValue() const {
     std::vector<const RespType *> ret;
-    for (const auto &val : value) {
+    for (const auto &val : m_value) {
       ret.push_back(val.get());
     }
     return ret;
   }
 
-  std::vector<std::unique_ptr<RespType>> release() { return std::move(value); }
+  std::vector<std::unique_ptr<RespType>> release() {
+    return std::move(m_value);
+  }
 
   virtual std::string serialize() override {
     std::string serialized_string("*");
-    if (value.empty()) {
+    if (m_value.empty()) {
       return serialized_string + "-1" + CRLF;
     }
-    serialized_string += std::to_string(value.size()) + CRLF;
-    for (const auto &element : value) {
+    serialized_string += std::to_string(m_value.size()) + CRLF;
+    for (const auto &element : m_value) {
       serialized_string += element->serialize();
     }
     return serialized_string;
   }
 
 private:
-  std::vector<std::unique_ptr<RespType>> value;
+  std::vector<std::unique_ptr<RespType>> m_value;
 };
 
 class RespBulkString : public RespType {
 public:
-  RespBulkString(std::string val)
-      : RespType(BULK_STRING), value(std::move(val)) {}
+  RespBulkString(std::string val, bool lastCrlf = true)
+      : RespType(BULK_STRING), m_value(std::move(val)), m_lastCrlf(lastCrlf) {}
 
   virtual std::unique_ptr<RespType> clone() override {
     return std::make_unique<RespBulkString>(*this);
   }
 
-  std::string getValue() const { return value; }
+  std::string getValue() const { return m_value; }
 
   virtual std::string serialize() override {
-    if (value.empty()) {
+    if (m_value.empty()) {
       return std::string("$-1") + CRLF;
     }
-    return std::string("$") + std::to_string(value.length()) + CRLF +
-           getValue() + CRLF;
+    auto resp =
+        std::string("$") + std::to_string(m_value.length()) + CRLF + getValue();
+    if (m_lastCrlf) {
+      resp += CRLF;
+    }
+    return resp;
   }
 
 private:
-  std::string value;
+  std::string m_value;
+  bool m_lastCrlf;
 };
 
 class RespError : public RespType {
 public:
-  RespError(std::string val) : RespType(ERROR), value(std::move(val)) {}
+  RespError(std::string val) : RespType(ERROR), m_value(std::move(val)) {}
 
   virtual std::unique_ptr<RespType> clone() override {
     return std::make_unique<RespError>(*this);
   }
 
-  std::string getValue() const { return value; }
+  std::string getValue() const { return m_value; }
 
   virtual std::string serialize() override {
     return std::string("-") + getValue() + CRLF;
   }
 
 private:
-  std::string value;
-};
-
-class RespRDB : public RespBulkString {
-public:
-  RespRDB(std::string val) : RespBulkString(std::move(val)) {}
-  virtual std::string serialize() override {
-    auto bulkStr = RespBulkString::serialize();
-    // remove CRLF
-    bulkStr.pop_back();
-    bulkStr.pop_back();
-    return bulkStr;
-  }
+  std::string m_value;
 };
