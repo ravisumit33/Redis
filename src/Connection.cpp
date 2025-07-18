@@ -23,7 +23,10 @@
 Connection::Connection(const unsigned socket_fd, const AppConfig &config)
     : m_socket_fd(socket_fd), m_config(config) {}
 
-Connection::~Connection() { close(m_socket_fd); }
+Connection::~Connection() {
+  std::cout << "Connection closed at: " << m_socket_fd << std::endl;
+  close(m_socket_fd);
+}
 
 std::pair<Command *, std::vector<std::unique_ptr<RespType>>>
 Connection::parseCommand(std::istream &in) const {
@@ -79,7 +82,7 @@ void ClientConnection::handleConnection() {
     while (true) {
       std::string data = readFromSocket(getSocketFd());
       if (data.empty()) {
-        std::cout << "Client disconnected" << std::endl;
+        std::cout << "Client disconnected at: " << getSocketFd() << std::endl;
         break;
       }
 
@@ -294,7 +297,7 @@ void ServerConnection::handleConnection() {
     while (true) {
       std::string data = readFromSocket(getSocketFd());
       if (data.empty()) {
-        std::cout << "Server disconnected" << std::endl;
+        std::cout << "Server disconnected at: " << getSocketFd() << std::endl;
         break;
       }
 

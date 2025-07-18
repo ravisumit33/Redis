@@ -1,8 +1,6 @@
 #include "RedisServer.hpp"
 #include "AppConfig.hpp"
 #include "Connection.hpp"
-#include "RespType.hpp"
-#include "utils.hpp"
 #include <arpa/inet.h>
 #include <cassert>
 #include <iostream>

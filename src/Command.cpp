@@ -182,3 +182,13 @@ PsyncCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   result.push_back(std::make_unique<RespBulkString>(empty_rdb_binary, false));
   return result;
 }
+
+CommandRegistrar<WaitCommand> WaitCommand::registrar("WAIT");
+
+std::vector<std::unique_ptr<RespType>>
+WaitCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                         const AppConfig &config) {
+  std::vector<std::unique_ptr<RespType>> result;
+  result.push_back(std::make_unique<RespInt>(0));
+  return result;
+}
