@@ -19,6 +19,8 @@ public:
 
   bool hasSlaves() const { return !m_slaves.empty(); }
 
+  unsigned getSlaveCount() const { return m_slaves.size(); }
+
   void addSlave(unsigned slave_fd) {
     std::lock_guard<std::mutex> lock(mMutex);
     m_slaves.insert(slave_fd);

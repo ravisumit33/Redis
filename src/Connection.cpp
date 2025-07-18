@@ -231,6 +231,8 @@ void ServerConnection::configurePsync() {
       }
     } else {
       std::string servResponse = readFromSocket(getSocketFd());
+      std::cout << "Received: " << servResponse
+                << " from master: " << getSocketFd() << std::endl;
       std::istringstream ss(servResponse);
       input_stream_ref = ss;
       if (!extractRDB(input_stream_ref)) {

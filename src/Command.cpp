@@ -189,6 +189,7 @@ std::vector<std::unique_ptr<RespType>>
 WaitCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                          const AppConfig &config) {
   std::vector<std::unique_ptr<RespType>> result;
-  result.push_back(std::make_unique<RespInt>(0));
+  auto &master_state = ReplicationManager::getInstance().master();
+  result.push_back(std::make_unique<RespInt>(master_state.getSlaveCount()));
   return result;
 }
