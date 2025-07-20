@@ -11,7 +11,7 @@ class Command {
 public:
   virtual ~Command() = default;
 
-  enum Type { ECHO, PING, SET, GET, INFO, REPLCONF, PSYNC, WAIT, TYPE };
+  enum Type { ECHO, PING, SET, GET, INFO, REPLCONF, PSYNC, WAIT, TYPE, XADD };
 
   std::vector<std::unique_ptr<RespType>>
   execute(const std::vector<std::unique_ptr<RespType>> &args,
@@ -209,5 +209,23 @@ private:
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
     return args.size() == 1;
+  }
+};
+
+class XaddCommand : public Command {
+public:
+  XaddCommand() : Command(XADD) {}
+
+private:
+  static CommandRegistrar<XaddCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              const AppConfig &config, unsigned socket_fd) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    std::size_t nargs = args.size();
+    return (nargs >= 4 && nargs % 2 == 0);
   }
 };

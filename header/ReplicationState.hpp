@@ -31,7 +31,10 @@ public:
     return !m_slaves.empty();
   }
 
-  unsigned getSlaveCount() const { return m_slaves.size(); }
+  unsigned getSlaveCount() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_slaves.size();
+  }
 
   void addSlave(unsigned slave_fd, uint64_t initial_offset = 0) {
     std::lock_guard<std::mutex> lock(m_mutex);

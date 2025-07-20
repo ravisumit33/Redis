@@ -12,6 +12,7 @@
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,7 @@ SetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
     auto expiryArgName = static_cast<RespBulkString &>(*args.at(2)).getValue();
     if (expiryArgName != "px") {
       result.push_back(std::make_unique<RespError>("Unsupported command arg"));
+      return result;
     }
     try {
       auto expiry_time_str =
@@ -67,10 +69,12 @@ SetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
           static_cast<RespBulkString &>(*args.at(3)).getValue();
       std::cerr << "SET command: Invalid expiry time '" << expiry_time_str
                 << "': " << ex.what() << std::endl;
+      result.push_back(std::make_unique<RespError>("Unsupported command arg"));
+      return result;
     }
   }
 
-  RedisStore::instance().set(key, value, expiry);
+  RedisStore::instance().setString(key, value, expiry);
 
   result.push_back(std::make_unique<RespString>("OK"));
   return result;
@@ -85,16 +89,15 @@ GetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
 
   auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
 
-  std::string return_value = "";
   auto stored_value = RedisStore::instance().get(key);
 
   if (!stored_value) {
-    result.push_back(std::make_unique<RespBulkString>(return_value));
+    result.push_back(std::make_unique<RespBulkString>(""));
     return result;
   }
 
-  return_value = stored_value.value();
-  result.push_back(std::make_unique<RespBulkString>(return_value));
+  auto return_value = std::move(stored_value.value());
+  result.push_back(std::make_unique<RespBulkString>(return_value->serialize()));
   return result;
 }
 
@@ -231,8 +234,36 @@ TypeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                          const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
   auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
-  auto store_val = RedisStore::instance().get(arg1);
-  std::string val_type = (store_val ? "string" : "none");
+  auto store_val_ptr = RedisStore::instance().get(arg1);
+  if (!store_val_ptr) {
+    result.push_back(std::make_unique<RespString>("none"));
+    return result;
+  }
+  auto val_type = store_val_ptr.value()->getTypeStr();
   result.push_back(std::make_unique<RespString>(val_type));
+  return result;
+}
+
+CommandRegistrar<XaddCommand> XaddCommand::registrar("XADD");
+
+std::vector<std::unique_ptr<RespType>>
+XaddCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                         const AppConfig &config, unsigned socket_fd) {
+
+  std::vector<std::unique_ptr<RespType>> result;
+  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  auto stream_entry_id = static_cast<RespBulkString &>(*args.at(1)).getValue();
+
+  StreamValue::StreamEntry stream_entry;
+  std::size_t nargs = args.size();
+  for (int i = 2; i < nargs; i += 2) {
+    auto entry_key = static_cast<RespBulkString &>(*args.at(i)).getValue();
+    auto entry_val = static_cast<RespBulkString &>(*args.at(i + 1)).getValue();
+    stream_entry[entry_key] = entry_val;
+  }
+
+  RedisStore::instance().addStreamEntry(store_key, stream_entry_id,
+                                        std::move(stream_entry));
+  result.push_back(std::make_unique<RespBulkString>(stream_entry_id));
   return result;
 }

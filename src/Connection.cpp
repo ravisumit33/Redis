@@ -50,8 +50,8 @@ void ClientConnection::handleConnection() {
         break;
       }
 
-              std::cout << "Received: " << data
-                  << " from client [fd=" << getSocketFd() << "]" << std::endl;
+      std::cout << "Received: " << data << " from client [fd=" << getSocketFd()
+                << "]" << std::endl;
 
       std::stringstream ss(data);
       while (ss.peek() != std::char_traits<char>::eof()) {
@@ -71,9 +71,11 @@ void ClientConnection::handleConnection() {
           }
 
           auto responses = command->execute(args, getConfig(), getSocketFd());
+          std::string resp;
           for (const auto &response : responses) {
-            writeToSocket(getSocketFd(), response->serialize());
+            resp += response->serialize();
           }
+          writeToSocket(getSocketFd(), resp);
 
           if (getConfig().isMaster() && command->isWriteCommand()) {
             auto &master_state = ReplicationManager::getInstance().master();
@@ -169,11 +171,11 @@ void ServerConnection::configurePsync() {
   cmd.push_back(std::make_unique<RespBulkString>("-1"));
   sendCommand(std::move(cmd));
   validateResponse([this](const std::string &response, std::istringstream &in) {
-    std::istringstream ss(response);
-    ss.exceptions(std::ios::badbit);
+    std::istringstream stream(response);
+    stream.exceptions(std::ios::badbit);
     std::string cmd, repl_id;
     unsigned repl_offset;
-    ss >> cmd >> repl_id >> repl_offset;
+    stream >> cmd >> repl_id >> repl_offset;
     if (cmd != "FULLRESYNC") {
       std::cerr << "PSYNC: Expected 'FULLRESYNC' but got '" << response << "'"
                 << std::endl;
@@ -197,8 +199,8 @@ void ServerConnection::configurePsync() {
       auto parsed_rdb_ptr = bulk_string_parser.parse(ins); // TODO: Store RDB
       auto rdb_bulk_string =
           static_cast<RespBulkString &>(*parsed_rdb_ptr.get());
-              std::cout << "Received RDB file from master [fd=" << getSocketFd() << "]"
-                  << std::endl;
+      std::cout << "Received RDB file from master [fd=" << getSocketFd() << "]"
+                << std::endl;
       return true;
     };
 
@@ -210,13 +212,13 @@ void ServerConnection::configurePsync() {
       }
     } else {
       std::string servResponse = readFromSocket(getSocketFd());
-              std::cout << "Received: " << servResponse
-                  << " from master [fd=" << getSocketFd() << "]" << std::endl;
+      std::cout << "Received: " << servResponse
+                << " from master [fd=" << getSocketFd() << "]" << std::endl;
       std::istringstream ss(servResponse);
-      input_stream_ref = ss;
-      if (!extractRDB(input_stream_ref)) {
+      if (!extractRDB(ss)) {
         throw std::runtime_error("Unexpected RDB file");
       }
+      input_stream_ref = ss;
     }
 
     auto &input_stream = input_stream_ref.get();
@@ -230,17 +232,24 @@ void ServerConnection::configurePsync() {
       auto [command, args] = parseCommand(input_stream);
       auto responses = command->execute(args, getConfig(), getSocketFd());
       if (command->getType() == Command::REPLCONF) {
+        std::string resp;
         for (const auto &response : responses) {
-          writeToSocket(getSocketFd(), response->serialize());
+          resp += response->serialize();
         }
-        std::streampos pos = ss.tellg();
+        writeToSocket(getSocketFd(), resp);
+        std::streampos pos = input_stream.tellg();
         std::size_t bytes_remaining =
-            (pos != -1) ? (ss.str().size() - static_cast<std::size_t>(pos)) : 0;
+            (pos != -1)
+                ? (input_stream.str().size() - static_cast<std::size_t>(pos))
+                : 0;
         std::size_t bytes_read = total_bytes_after_handshake - bytes_remaining;
         std::size_t new_bytes_read = bytes_read - bytes_recorded;
         auto &slave_state = ReplicationManager::getInstance().slave();
         slave_state.addBytesProcessed(new_bytes_read);
         bytes_recorded += new_bytes_read;
+      } else {
+        throw std::runtime_error(std::string("Unsupported backlog command: ") +
+                                 std::to_string(command->getType()));
       }
     }
 
@@ -291,11 +300,12 @@ void ServerConnection::handleConnection() {
       while (ss.peek() != std::char_traits<char>::eof()) {
         auto [command, args] = parseCommand(ss);
         auto responses = command->execute(args, getConfig(), getSocketFd());
+        std::string serialized_response;
         for (const auto &response : responses) {
-          auto serialized_response = response->serialize();
-          if (command->getType() == Command::REPLCONF) {
-            writeToSocket(getSocketFd(), serialized_response);
-          }
+          serialized_response += response->serialize();
+        }
+        if (command->getType() == Command::REPLCONF) {
+          writeToSocket(getSocketFd(), serialized_response);
         }
         std::streampos pos = ss.tellg();
         std::size_t bytes_remaining =
