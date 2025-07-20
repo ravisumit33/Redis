@@ -1,10 +1,13 @@
 #pragma once
 
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
+#include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_set>
+#include <unordered_map>
 #include <variant>
 
 class MasterState {
@@ -17,29 +20,48 @@ public:
 
   uint64_t getReplOffset() const { return m_repl_offset; }
 
-  bool hasSlaves() const { return !m_slaves.empty(); }
+  void updateReplOffset(uint64_t delta) {
+    m_repl_offset += delta;
+    std::cout << "Master repl_offset updated to: " << m_repl_offset
+              << std::endl;
+  }
+
+  bool hasSlaves() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return !m_slaves.empty();
+  }
 
   unsigned getSlaveCount() const { return m_slaves.size(); }
 
-  void addSlave(unsigned slave_fd) {
-    std::lock_guard<std::mutex> lock(mMutex);
-    m_slaves.insert(slave_fd);
+  void addSlave(unsigned slave_fd, uint64_t initial_offset = 0) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_slaves[slave_fd] = initial_offset;
+    m_cv.notify_all();
   }
 
   void removeSlave(unsigned slave_fd) {
-    std::lock_guard<std::mutex> lock(mMutex);
+    std::lock_guard<std::mutex> lock(m_mutex);
     m_slaves.erase(slave_fd);
+    m_cv.notify_all();
   }
 
+  void updateSlave(unsigned slave_fd, uint64_t offset);
+
   void propagateToSlave(const std::string &data);
+
+  unsigned waitForSlaves(unsigned expected_slaves_count, uint64_t timeout_ms);
+
+  void sendGetAckToSlaves();
 
 private:
   std::string m_replid;
   uint64_t m_repl_offset;
-  std::unordered_set<unsigned> m_slaves;
-  mutable std::mutex mMutex;
+  std::unordered_map<unsigned, uint64_t> m_slaves;
+  mutable std::mutex m_mutex;
+  std::condition_variable m_cv;
 
   MasterState(const MasterState &state) = delete;
+
   MasterState &operator=(const MasterState &) = delete;
 };
 
@@ -79,7 +101,8 @@ public:
 private:
   Role m_role = Role::None;
   bool m_initialized = false;
-  std::variant<MasterState, SlaveState> m_state;
+  std::variant<std::shared_ptr<MasterState>, std::shared_ptr<SlaveState>>
+      m_state;
 
   ReplicationManager() = default;
   ReplicationManager(const ReplicationManager &) = delete;

@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -24,7 +25,7 @@ CommandRegistrar<EchoCommand> EchoCommand::registrar("ECHO");
 
 std::vector<std::unique_ptr<RespType>>
 EchoCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config) {
+                         const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
   result.push_back(args.at(0)->clone());
   return result;
@@ -34,7 +35,7 @@ CommandRegistrar<PingCommand> PingCommand::registrar("PING");
 
 std::vector<std::unique_ptr<RespType>>
 PingCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config) {
+                         const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
   result.push_back(std::make_unique<RespBulkString>("PONG"));
   return result;
@@ -44,7 +45,7 @@ CommandRegistrar<SetCommand> SetCommand::registrar("SET");
 
 std::vector<std::unique_ptr<RespType>>
 SetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                        const AppConfig &config) {
+                        const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
 
   size_t nargs = args.size();
@@ -57,11 +58,15 @@ SetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
       result.push_back(std::make_unique<RespError>("Unsupported command arg"));
     }
     try {
-      auto expiryDelta =
-          std::stoul(static_cast<RespBulkString &>(*args.at(3)).getValue());
+      auto expiry_time_str =
+          static_cast<RespBulkString &>(*args.at(3)).getValue();
+      auto expiryDelta = std::stoul(expiry_time_str);
       expiry = std::chrono::milliseconds(expiryDelta);
     } catch (const std::exception &ex) {
-      std::cerr << "Unexpected expiry time: " << ex.what() << std::endl;
+      auto expiry_time_str =
+          static_cast<RespBulkString &>(*args.at(3)).getValue();
+      std::cerr << "SET command: Invalid expiry time '" << expiry_time_str
+                << "': " << ex.what() << std::endl;
     }
   }
 
@@ -75,7 +80,7 @@ CommandRegistrar<GetCommand> GetCommand::registrar("GET");
 
 std::vector<std::unique_ptr<RespType>>
 GetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                        const AppConfig &config) {
+                        const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
 
   auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -97,7 +102,7 @@ CommandRegistrar<InfoCommand> InfoCommand::registrar("INFO");
 
 std::vector<std::unique_ptr<RespType>>
 InfoCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config) {
+                         const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
 
   auto arg = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -125,25 +130,42 @@ CommandRegistrar<ReplConfCommand> ReplConfCommand::registrar("REPLCONF");
 
 std::vector<std::unique_ptr<RespType>>
 ReplConfCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                             const AppConfig &config) {
+                             const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
   if (config.isMaster()) {
-    result.push_back(std::make_unique<RespString>("OK"));
+    auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
+    auto arg2 = static_cast<RespBulkString &>(*args.at(1)).getValue();
+    if (arg1 == "ACK") {
+      uint64_t slave_offset;
+      try {
+        slave_offset = std::stoull(arg2);
+      } catch (const std::exception &ex) {
+        std::cerr << "Error getting offset in REPLCONF ACK: " << ex.what()
+                  << std::endl;
+        result.push_back(
+            std::make_unique<RespError>("Unsupported command arg"));
+        return result;
+      }
+      auto &master_state = ReplicationManager::getInstance().master();
+      master_state.updateSlave(socket_fd, slave_offset);
+    } else {
+      result.push_back(std::make_unique<RespString>("OK"));
+    }
   } else {
     auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
     auto arg2 = static_cast<RespBulkString &>(*args.at(1)).getValue();
     if (arg1 != "GETACK" || arg2 != "*") {
       result.push_back(std::make_unique<RespError>("Unsupported command arg"));
-    } else {
-      auto resp_array = std::make_unique<RespArray>();
-      auto &slave_state = ReplicationManager::getInstance().slave();
-      std::size_t bytes_processed = slave_state.getBytesProcessed();
-      resp_array->add(std::make_unique<RespBulkString>("REPLCONF"))
-          ->add(std::make_unique<RespBulkString>("ACK"))
-          ->add(std::make_unique<RespBulkString>(
-              std::to_string(bytes_processed)));
-      result.push_back(std::move(resp_array));
+      return result;
     }
+    auto resp_array = std::make_unique<RespArray>();
+    auto &slave_state = ReplicationManager::getInstance().slave();
+    std::size_t bytes_processed = slave_state.getBytesProcessed();
+    resp_array->add(std::make_unique<RespBulkString>("REPLCONF"))
+        ->add(std::make_unique<RespBulkString>("ACK"))
+        ->add(
+            std::make_unique<RespBulkString>(std::to_string(bytes_processed)));
+    result.push_back(std::move(resp_array));
   }
   return result;
 }
@@ -152,7 +174,7 @@ CommandRegistrar<PsyncCommand> PsyncCommand::registrar("PSYNC");
 
 std::vector<std::unique_ptr<RespType>>
 PsyncCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                          const AppConfig &config) {
+                          const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
 
   auto arg = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -187,9 +209,17 @@ CommandRegistrar<WaitCommand> WaitCommand::registrar("WAIT");
 
 std::vector<std::unique_ptr<RespType>>
 WaitCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config) {
+                         const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
+
+  auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  unsigned expected_slave_count = std::stoul(arg1);
+  auto arg2 = static_cast<RespBulkString &>(*args.at(1)).getValue();
+  unsigned timeout_ms = std::stoul(arg2);
   auto &master_state = ReplicationManager::getInstance().master();
-  result.push_back(std::make_unique<RespInt>(master_state.getSlaveCount()));
+  master_state.sendGetAckToSlaves();
+  unsigned slave_count =
+      master_state.waitForSlaves(expected_slave_count, timeout_ms);
+  result.push_back(std::make_unique<RespInt>(slave_count));
   return result;
 }

@@ -1,9 +1,8 @@
 #pragma once
 
 #include "AppConfig.hpp"
-#include "Command.hpp"
+#include "RespType.hpp"
 #include <functional>
-#include <istream>
 #include <memory>
 #include <vector>
 
@@ -16,9 +15,6 @@ public:
   virtual void handleConnection() = 0;
 
 protected:
-  std::pair<Command *, std::vector<std::unique_ptr<RespType>>>
-  parseCommand(std::istream &in) const;
-
   const AppConfig &getConfig() const { return m_config; }
 
   const unsigned getSocketFd() const { return m_socket_fd; }
@@ -31,7 +27,7 @@ private:
 class ClientConnection : public Connection {
 public:
   ClientConnection(const unsigned socket_fd, const AppConfig &config)
-      : Connection(socket_fd, config) {}
+      : Connection(socket_fd, config), m_is_slave(false) {}
 
   virtual void handleConnection() override;
 

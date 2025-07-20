@@ -1,6 +1,5 @@
 #include "Connection.hpp"
 #include "AppConfig.hpp"
-#include "Command.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "RespTypeParser.hpp"
@@ -24,44 +23,8 @@ Connection::Connection(const unsigned socket_fd, const AppConfig &config)
     : m_socket_fd(socket_fd), m_config(config) {}
 
 Connection::~Connection() {
-  std::cout << "Connection closed at: " << m_socket_fd << std::endl;
+  std::cout << "Connection closed [fd=" << m_socket_fd << "]" << std::endl;
   close(m_socket_fd);
-}
-
-std::pair<Command *, std::vector<std::unique_ptr<RespType>>>
-Connection::parseCommand(std::istream &in) const {
-  char type;
-  in.get(type);
-  if (!in) {
-    throw std::runtime_error("No command RESP type");
-  }
-
-  if (type != '*') {
-    throw std::runtime_error("Unexpected command RESP type");
-  }
-
-  auto parser = RespParserRegistry::instance().get(type);
-  if (!parser) {
-    throw std::logic_error("Parser not found");
-  }
-  auto parsed_command = parser->parse(in);
-  RespArray &cmd_arr = static_cast<RespArray &>(*parsed_command);
-
-  auto command_args = cmd_arr.release();
-  auto command_name_ptr = command_args.at(0).get();
-  if (command_name_ptr->getType() != RespType::BULK_STRING) {
-    throw std::runtime_error("Unexpected command name RESP type");
-  }
-
-  auto cmd_name =
-      static_cast<const RespBulkString &>(*command_name_ptr).getValue();
-  auto command = CommandRegistry::instance().get(cmd_name);
-  if (!command) {
-    throw std::runtime_error("Command not supported");
-  }
-  command_args.erase(command_args.begin());
-
-  return {command, std::move(command_args)};
 }
 
 ClientConnection::~ClientConnection() {
@@ -82,12 +45,13 @@ void ClientConnection::handleConnection() {
     while (true) {
       std::string data = readFromSocket(getSocketFd());
       if (data.empty()) {
-        std::cout << "Client disconnected at: " << getSocketFd() << std::endl;
+        std::cout << "Client disconnected gracefully [fd=" << getSocketFd()
+                  << "]" << std::endl;
         break;
       }
 
-      std::cout << "Received: " << data << " from client: " << getSocketFd()
-                << std::endl;
+              std::cout << "Received: " << data
+                  << " from client [fd=" << getSocketFd() << "]" << std::endl;
 
       std::stringstream ss(data);
       while (ss.peek() != std::char_traits<char>::eof()) {
@@ -100,30 +64,33 @@ void ClientConnection::handleConnection() {
                   static_cast<RespBulkString &>(*args.at(0)).getValue();
               if (first_arg == "listening-port") {
                 addAsSlave();
+                std::cout << "Client registered as slave [fd=" << getSocketFd()
+                          << "]" << std::endl;
               }
             }
           }
 
-          auto responses = command->execute(args, getConfig());
+          auto responses = command->execute(args, getConfig(), getSocketFd());
           for (const auto &response : responses) {
             writeToSocket(getSocketFd(), response->serialize());
           }
 
           if (getConfig().isMaster() && command->isWriteCommand()) {
             auto &master_state = ReplicationManager::getInstance().master();
-            if (master_state.hasSlaves()) {
-              master_state.propagateToSlave(data);
-            }
+            master_state.updateReplOffset(data.size());
+            master_state.propagateToSlave(data);
           }
         } catch (const std::exception &ex) {
-          std::cerr << "Exception occurred: " << ex.what() << std::endl;
-          RespError errResponse("Unknown command");
+          std::cerr << "Command execution error [fd=" << getSocketFd()
+                    << "]: " << ex.what() << std::endl;
+          RespError errResponse("ERR " + std::string(ex.what()));
           writeToSocket(getSocketFd(), errResponse.serialize());
         }
       }
     }
   } catch (const std::exception &exp) {
-    std::cerr << "Error handling client: " << exp.what() << std::endl;
+    std::cerr << "Client connection error [fd=" << getSocketFd()
+              << "]: " << exp.what() << std::endl;
   }
 }
 
@@ -148,12 +115,16 @@ void ServerConnection::validateResponse(auto validate) {
   }
 
   if (type != '+') {
-    throw std::runtime_error("Unexpected response RESP type");
+    throw std::runtime_error(
+        "Replication handshake: Expected simple string '+' response, got '" +
+        std::string(1, type) + "'");
   }
 
   auto parser = RespParserRegistry::instance().get(type);
   if (!parser) {
-    throw std::runtime_error("Malformed response");
+    throw std::runtime_error(
+        "Replication handshake: No parser found for response type '" +
+        std::string(1, type) + "'");
   }
   auto parsed_response = parser->parse(in);
   RespString &response = static_cast<RespString &>(*parsed_response);
@@ -169,8 +140,10 @@ void ServerConnection::configureRepl() {
   sendCommand(std::move(cmd));
   validateResponse([](const std::string &response, std::istringstream &in) {
     if (response != "OK") {
-      std::cerr << "Expected OK but got " << response << std::endl;
-      throw std::runtime_error("Unexpected response from server");
+      std::cerr << "REPLCONF listening-port: Expected 'OK' but got '"
+                << response << "'" << std::endl;
+      throw std::runtime_error("REPLCONF listening-port failed: got '" +
+                               response + "' instead of 'OK'");
     }
   });
 
@@ -181,8 +154,10 @@ void ServerConnection::configureRepl() {
   sendCommand(std::move(cmd));
   validateResponse([](const std::string &response, std::istringstream &in) {
     if (response != "OK") {
-      std::cerr << "Expected OK but got " << response << std::endl;
-      throw std::runtime_error("Unexpected response from server");
+      std::cerr << "REPLCONF capa: Expected 'OK' but got '" << response << "'"
+                << std::endl;
+      throw std::runtime_error("REPLCONF capa failed: got '" + response +
+                               "' instead of 'OK'");
     }
   });
 }
@@ -200,12 +175,14 @@ void ServerConnection::configurePsync() {
     unsigned repl_offset;
     ss >> cmd >> repl_id >> repl_offset;
     if (cmd != "FULLRESYNC") {
-      std::cerr << "Expected FULLRESYNC but got " << response << std::endl;
-      throw std::runtime_error("Unexpected response from server");
+      std::cerr << "PSYNC: Expected 'FULLRESYNC' but got '" << response << "'"
+                << std::endl;
+      throw std::runtime_error("PSYNC failed: expected 'FULLRESYNC' but got '" +
+                               response + "'");
     }
     std::cout << "FULLRESYNC recieved" << std::endl;
 
-    auto extractRDB = [](std::istream &ins) -> bool {
+    auto extractRDB = [this](std::istream &ins) -> bool {
       char type;
       ins.get(type);
       if (!ins || type != '$') {
@@ -220,6 +197,8 @@ void ServerConnection::configurePsync() {
       auto parsed_rdb_ptr = bulk_string_parser.parse(ins); // TODO: Store RDB
       auto rdb_bulk_string =
           static_cast<RespBulkString &>(*parsed_rdb_ptr.get());
+              std::cout << "Received RDB file from master [fd=" << getSocketFd() << "]"
+                  << std::endl;
       return true;
     };
 
@@ -231,16 +210,14 @@ void ServerConnection::configurePsync() {
       }
     } else {
       std::string servResponse = readFromSocket(getSocketFd());
-      std::cout << "Received: " << servResponse
-                << " from master: " << getSocketFd() << std::endl;
+              std::cout << "Received: " << servResponse
+                  << " from master [fd=" << getSocketFd() << "]" << std::endl;
       std::istringstream ss(servResponse);
       input_stream_ref = ss;
       if (!extractRDB(input_stream_ref)) {
         throw std::runtime_error("Unexpected RDB file");
       }
     }
-
-    std::cout << "RDB extraction done" << std::endl;
 
     auto &input_stream = input_stream_ref.get();
     std::streampos pos = input_stream.tellg();
@@ -251,7 +228,7 @@ void ServerConnection::configurePsync() {
     std::size_t bytes_recorded = 0;
     while (input_stream.peek() != std::char_traits<char>::eof()) {
       auto [command, args] = parseCommand(input_stream);
-      auto responses = command->execute(args, getConfig());
+      auto responses = command->execute(args, getConfig(), getSocketFd());
       if (command->getType() == Command::REPLCONF) {
         for (const auto &response : responses) {
           writeToSocket(getSocketFd(), response->serialize());
@@ -277,8 +254,10 @@ void ServerConnection::handShake() {
   sendCommand(std::move(cmd));
   validateResponse([](const std::string &response, std::istringstream &in) {
     if (response != "PONG") {
-      std::cerr << "Expected PONG but got " << response << std::endl;
-      throw std::runtime_error("Unexpected response from server");
+      std::cerr << "PING handshake: Expected 'PONG' but got '" << response
+                << "'" << std::endl;
+      throw std::runtime_error("PING handshake failed: got '" + response +
+                               "' instead of 'PONG'");
     }
   });
   std::cout << "PING complete" << std::endl;
@@ -311,7 +290,7 @@ void ServerConnection::handleConnection() {
       std::size_t bytes_recorded = 0;
       while (ss.peek() != std::char_traits<char>::eof()) {
         auto [command, args] = parseCommand(ss);
-        auto responses = command->execute(args, getConfig());
+        auto responses = command->execute(args, getConfig(), getSocketFd());
         for (const auto &response : responses) {
           auto serialized_response = response->serialize();
           if (command->getType() == Command::REPLCONF) {
@@ -329,6 +308,7 @@ void ServerConnection::handleConnection() {
       }
     }
   } catch (const std::exception &exp) {
-    std::cerr << "Error handling server: " << exp.what() << std::endl;
+    std::cerr << "Server connection error [fd=" << getSocketFd()
+              << "]: " << exp.what() << std::endl;
   }
 }

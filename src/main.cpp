@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -43,12 +44,14 @@ int main(int argc, char **argv) {
       slave_config);
 
   try {
-    RedisServer server(config);
-    server.start();
+    auto server = std::make_shared<RedisServer>(config);
+    server->start();
   } catch (const std::exception &e) {
-    std::cerr << "Server error: " << e.what() << std::endl;
+    std::cerr << "FATAL: Server startup failed: " << e.what() << std::endl;
     return 1;
   }
+  
+  std::cout << "Redis server shutting down..." << std::endl;
 
   return 0;
 }

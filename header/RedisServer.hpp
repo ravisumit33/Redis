@@ -2,8 +2,9 @@
 
 #include "AppConfig.hpp"
 #include <atomic>
+#include <memory>
 
-class RedisServer {
+class RedisServer : public std::enable_shared_from_this<RedisServer> {
 public:
   RedisServer(const AppConfig &config);
   void start();
@@ -11,7 +12,7 @@ public:
   ~RedisServer();
 
 private:
-  const AppConfig &m_config;
+  const AppConfig m_config;
   bool m_isRunning = false;
   std::atomic_bool m_init_done = false;
   int m_server_fd = -1;
