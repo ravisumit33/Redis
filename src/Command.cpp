@@ -223,3 +223,16 @@ WaitCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   result.push_back(std::make_unique<RespInt>(slave_count));
   return result;
 }
+
+CommandRegistrar<TypeCommand> TypeCommand::registrar("TYPE");
+
+std::vector<std::unique_ptr<RespType>>
+TypeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                         const AppConfig &config, unsigned socket_fd) {
+  std::vector<std::unique_ptr<RespType>> result;
+  auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  auto store_val = RedisStore::instance().get(arg1);
+  std::string val_type = (store_val ? "string" : "none");
+  result.push_back(std::make_unique<RespString>(val_type));
+  return result;
+}

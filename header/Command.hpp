@@ -11,7 +11,7 @@ class Command {
 public:
   virtual ~Command() = default;
 
-  enum Type { ECHO, PING, SET, GET, INFO, REPLCONF, PSYNC, WAIT };
+  enum Type { ECHO, PING, SET, GET, INFO, REPLCONF, PSYNC, WAIT, TYPE };
 
   std::vector<std::unique_ptr<RespType>>
   execute(const std::vector<std::unique_ptr<RespType>> &args,
@@ -192,5 +192,22 @@ private:
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
     return args.size() == 2;
+  }
+};
+
+class TypeCommand : public Command {
+public:
+  TypeCommand() : Command(TYPE) {}
+
+private:
+  static CommandRegistrar<TypeCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              const AppConfig &config, unsigned socket_fd) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 1;
   }
 };
