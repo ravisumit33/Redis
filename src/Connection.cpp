@@ -205,6 +205,7 @@ void ServerConnection::configurePsync() {
     };
 
     std::reference_wrapper<std::istringstream> input_stream_ref = in;
+    std::optional<std::istringstream> next_server_response;
 
     if (in.peek() != std::char_traits<char>::eof()) {
       if (!extractRDB(in)) {
@@ -214,11 +215,11 @@ void ServerConnection::configurePsync() {
       std::string servResponse = readFromSocket(getSocketFd());
       std::cout << "Received: " << servResponse
                 << " from master [fd=" << getSocketFd() << "]" << std::endl;
-      std::istringstream ss(servResponse);
-      if (!extractRDB(ss)) {
+      next_server_response.emplace(servResponse);
+      if (!extractRDB(*next_server_response)) {
         throw std::runtime_error("Unexpected RDB file");
       }
-      input_stream_ref = ss;
+      input_stream_ref = *next_server_response;
     }
 
     auto &input_stream = input_stream_ref.get();
