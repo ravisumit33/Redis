@@ -232,26 +232,23 @@ void ServerConnection::configurePsync() {
     while (input_stream.peek() != std::char_traits<char>::eof()) {
       auto [command, args] = parseCommand(input_stream);
       auto responses = command->execute(args, getConfig(), getSocketFd());
-      if (command->getType() == Command::REPLCONF) {
-        std::string resp;
-        for (const auto &response : responses) {
-          resp += response->serialize();
-        }
-        writeToSocket(getSocketFd(), resp);
-        std::streampos pos = input_stream.tellg();
-        std::size_t bytes_remaining =
-            (pos != -1)
-                ? (input_stream.str().size() - static_cast<std::size_t>(pos))
-                : 0;
-        std::size_t bytes_read = total_bytes_after_handshake - bytes_remaining;
-        std::size_t new_bytes_read = bytes_read - bytes_recorded;
-        auto &slave_state = ReplicationManager::getInstance().slave();
-        slave_state.addBytesProcessed(new_bytes_read);
-        bytes_recorded += new_bytes_read;
-      } else {
-        throw std::runtime_error(std::string("Unsupported backlog command: ") +
-                                 std::to_string(command->getType()));
+      std::string resp;
+      for (const auto &response : responses) {
+        resp += response->serialize();
       }
+      if (command->getType() == Command::REPLCONF) {
+        writeToSocket(getSocketFd(), resp);
+      }
+      std::streampos pos = input_stream.tellg();
+      std::size_t bytes_remaining =
+          (pos != -1)
+              ? (input_stream.str().size() - static_cast<std::size_t>(pos))
+              : 0;
+      std::size_t bytes_read = total_bytes_after_handshake - bytes_remaining;
+      std::size_t new_bytes_read = bytes_read - bytes_recorded;
+      auto &slave_state = ReplicationManager::getInstance().slave();
+      slave_state.addBytesProcessed(new_bytes_read);
+      bytes_recorded += new_bytes_read;
     }
 
     std::cout << "Backlog commands executed" << std::endl;
