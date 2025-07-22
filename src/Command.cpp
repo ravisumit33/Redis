@@ -12,7 +12,6 @@
 #include <exception>
 #include <iostream>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -262,8 +261,14 @@ XaddCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
     stream_entry[entry_key] = entry_val;
   }
 
-  RedisStore::instance().addStreamEntry(store_key, stream_entry_id,
-                                        std::move(stream_entry));
+  try {
+    RedisStore::instance().addStreamEntry(store_key, stream_entry_id,
+                                          std::move(stream_entry));
+  } catch (const std::exception &ex) {
+    result.push_back(std::make_unique<RespError>(ex.what()));
+    return result;
+  }
+
   result.push_back(std::make_unique<RespBulkString>(stream_entry_id));
   return result;
 }

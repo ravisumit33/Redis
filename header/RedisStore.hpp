@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -66,7 +67,7 @@ private:
 class StreamValue : public RedisStoreValue {
 public:
   using StreamEntry = std::unordered_map<std::string, std::string>;
-  using StreamId = std::string;
+  using StreamEntryId = std::string;
 
   virtual std::string serialize() const override {
     // TODO: Implement it
@@ -79,12 +80,14 @@ public:
 
   StreamValue() : RedisStoreValue(STREAM) {}
 
-  void addEntry(const StreamId &stream_id, StreamEntry stream_entry) {
+  void addEntry(const StreamEntryId &stream_id, StreamEntry stream_entry) {
     mStreams[stream_id].merge(stream_entry);
   }
 
+  StreamEntryId getTopEntry() const;
+
 private:
-  std::unordered_map<StreamId, StreamEntry> mStreams;
+  std::map<StreamEntryId, StreamEntry> mStreams;
 };
 
 class RedisStore {
@@ -93,11 +96,13 @@ public:
                  std::optional<std::chrono::milliseconds> exp = std::nullopt);
 
   void addStreamEntry(const std::string &key,
-                      const StreamValue::StreamId &entry_id,
+                      const StreamValue::StreamEntryId &entry_id,
                       StreamValue::StreamEntry entry);
 
   std::optional<std::unique_ptr<RedisStoreValue>>
   get(const std::string &key) const;
+
+  bool keyExists(const std::string &key) const;
 
   static RedisStore &instance() {
     static RedisStore instance;

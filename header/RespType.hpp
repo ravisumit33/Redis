@@ -150,7 +150,7 @@ public:
   std::string getValue() const { return m_value; }
 
   virtual std::string serialize() override {
-    return std::string("-") + getValue() + CRLF;
+    return std::string("-") + "ERR " + getValue() + CRLF;
   }
 
 private:
