@@ -37,7 +37,7 @@ std::vector<std::unique_ptr<RespType>>
 PingCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                          const AppConfig &config, unsigned socket_fd) {
   std::vector<std::unique_ptr<RespType>> result;
-  result.push_back(std::make_unique<RespBulkString>("PONG"));
+  result.push_back(std::make_unique<RespString>("PONG"));
   return result;
 }
 
@@ -262,13 +262,14 @@ XaddCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   }
 
   try {
-    RedisStore::instance().addStreamEntry(store_key, stream_entry_id,
-                                          std::move(stream_entry));
+    auto saved_entry_id = RedisStore::instance().addStreamEntry(
+        store_key, stream_entry_id, std::move(stream_entry));
+    result.push_back(std::make_unique<RespBulkString>(
+        std::to_string(saved_entry_id.at(0)) + "-" +
+        std::to_string(saved_entry_id.at(1))));
+    return result;
   } catch (const std::exception &ex) {
     result.push_back(std::make_unique<RespError>(ex.what()));
     return result;
   }
-
-  result.push_back(std::make_unique<RespBulkString>(stream_entry_id));
-  return result;
 }
