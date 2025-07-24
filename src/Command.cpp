@@ -306,10 +306,19 @@ XrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   };
 
   auto stream_val = static_cast<StreamValue &>(**store_val_ptr);
-  auto entry_id_start = parseEntryId(stream_entry_id_start);
-  auto entry_id_end = parseEntryId(stream_entry_id_end);
-  auto it1 = stream_val.lowerBound(entry_id_start);
-  auto it2 = stream_val.upperBound(entry_id_end);
+  StreamValue::StreamIterator it1, it2;
+  if (stream_entry_id_start == "-") {
+    it1 = stream_val.begin();
+  } else {
+    auto entry_id_start = parseEntryId(stream_entry_id_start);
+    it1 = stream_val.lowerBound(entry_id_start);
+  }
+  if (stream_entry_id_end == "+") {
+    it2 = stream_val.end();
+  } else {
+    auto entry_id_end = parseEntryId(stream_entry_id_end);
+    it2 = stream_val.upperBound(entry_id_end);
+  }
 
   result.push_back(stream_val.serializeRangeIntoResp(it1, it2));
   return result;
