@@ -22,7 +22,8 @@ public:
     WAIT,
     TYPE,
     XADD,
-    XRANGE
+    XRANGE,
+    XREAD
   };
 
   std::vector<std::unique_ptr<RespType>>
@@ -248,6 +249,23 @@ public:
 
 private:
   static CommandRegistrar<XrangeCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              const AppConfig &config, unsigned socket_fd) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 3;
+  }
+};
+
+class XreadCommand : public Command {
+public:
+  XreadCommand() : Command(XREAD) {}
+
+private:
+  static CommandRegistrar<XreadCommand> registrar;
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,

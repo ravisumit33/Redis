@@ -1,16 +1,19 @@
 #include "utils.hpp"
 #include "Command.hpp"
 #include "RespTypeParser.hpp"
+#include <array>
 #include <iomanip>
 #include <iostream>
 #include <istream>
 #include <memory>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <sys/socket.h>
 #include <utility>
+#include <variant>
 #include <vector>
 
 uint8_t hexCharToInt(char c) {
@@ -112,4 +115,55 @@ parseCommand(std::istream &in) {
   command_args.erase(command_args.begin());
 
   return {command, std::move(command_args)};
+}
+
+std::array<uint64_t, 2> parseStreamEntryId(const std::string &s) {
+
+  std::size_t hyphen_pos = s.find("-");
+  uint64_t timestamp = std::stoull(s.substr(0, hyphen_pos));
+  uint64_t sequence = 0;
+  if (hyphen_pos != std::string::npos) {
+    sequence = std::stoull(s.substr(hyphen_pos + 1));
+  }
+  return {timestamp, sequence};
+}
+
+std::array<std::optional<uint64_t>, 2>
+parsePartialStreamEntryId(const std::string &entry_id) {
+  using EntryIdPart = std::variant<uint64_t, std::string>;
+  std::size_t hyphen_pos = entry_id.find("-");
+  if (hyphen_pos == std::string::npos) {
+    throw std::runtime_error("Invalid entry_id for stream");
+  }
+
+  auto parsePart = [](const std::string &s) -> EntryIdPart {
+    try {
+      return std::stoull(s);
+    } catch (...) {
+      return s;
+    }
+  };
+
+  auto part1 = parsePart(entry_id.substr(0, hyphen_pos));
+  auto part2 = parsePart(entry_id.substr(hyphen_pos + 1));
+  std::optional<uint64_t> timestamp, sequence;
+
+  auto extractPart = [](const EntryIdPart &part,
+                        std::optional<uint64_t> &target, const char *which) {
+    if (auto p = std::get_if<uint64_t>(&part)) {
+      target = *p;
+    } else if (auto str = std::get_if<std::string>(&part)) {
+      if (*str != "*") {
+        throw std::runtime_error(
+            std::string("Invalid entry_id component in XADD: ") + which);
+      }
+    } else {
+      throw std::runtime_error("Unhandled variant type in entry_id part");
+    }
+  };
+
+  extractPart(part1, timestamp, "timestamp");
+  extractPart(part2, sequence, "sequence");
+
+  return {timestamp, sequence};
 }

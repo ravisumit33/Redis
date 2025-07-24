@@ -295,31 +295,59 @@ XrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   auto stream_entry_id_end =
       static_cast<RespBulkString &>(*args.at(2)).getValue();
 
-  auto parseEntryId = [](const std::string &s) -> StreamValue::StreamEntryId {
-    std::size_t hyphen_pos = s.find("-");
-    uint64_t timestamp = std::stoull(s.substr(0, hyphen_pos));
-    uint64_t sequence = 0;
-    if (hyphen_pos != std::string::npos) {
-      sequence = std::stoull(s.substr(hyphen_pos + 1));
-    }
-    return {timestamp, sequence};
-  };
-
   auto stream_val = static_cast<StreamValue &>(**store_val_ptr);
   StreamValue::StreamIterator it1, it2;
   if (stream_entry_id_start == "-") {
     it1 = stream_val.begin();
   } else {
-    auto entry_id_start = parseEntryId(stream_entry_id_start);
+    auto entry_id_start = parseStreamEntryId(stream_entry_id_start);
     it1 = stream_val.lowerBound(entry_id_start);
   }
   if (stream_entry_id_end == "+") {
     it2 = stream_val.end();
   } else {
-    auto entry_id_end = parseEntryId(stream_entry_id_end);
+    auto entry_id_end = parseStreamEntryId(stream_entry_id_end);
     it2 = stream_val.upperBound(entry_id_end);
   }
 
   result.push_back(stream_val.serializeRangeIntoResp(it1, it2));
+  return result;
+}
+
+CommandRegistrar<XreadCommand> XreadCommand::registrar("XREAD");
+
+std::vector<std::unique_ptr<RespType>>
+XreadCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                          const AppConfig &config, unsigned socket_fd) {
+
+  std::vector<std::unique_ptr<RespType>> result;
+  auto read_type = static_cast<RespBulkString &>(*args.at(0)).getValue();
+
+  if (read_type != "streams") {
+    result.push_back(
+        std::make_unique<RespError>("Unsupported read_type arg: " + read_type));
+    return result;
+  }
+
+  auto store_key = static_cast<RespBulkString &>(*args.at(1)).getValue();
+
+  auto store_val_ptr = RedisStore::instance().get(store_key);
+  if (!store_val_ptr ||
+      (*store_val_ptr)->getType() != RedisStoreValue::STREAM) {
+    result.push_back(std::make_unique<RespArray>());
+    return result;
+  }
+
+  auto stream_val = static_cast<StreamValue &>(**store_val_ptr);
+  auto stream_entry_id_start =
+      static_cast<RespBulkString &>(*args.at(2)).getValue();
+  auto entry_id_start = parseStreamEntryId(stream_entry_id_start);
+  StreamValue::StreamIterator it = stream_val.upperBound(entry_id_start);
+  auto resp_array = std::make_unique<RespArray>();
+  auto key_array = std::make_unique<RespArray>();
+  key_array->add(std::make_unique<RespBulkString>(store_key))
+      ->add(stream_val.serializeRangeIntoResp(it));
+  resp_array->add(std::move(key_array));
+  result.push_back(std::move(resp_array));
   return result;
 }

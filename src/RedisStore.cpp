@@ -1,5 +1,6 @@
 #include "RedisStore.hpp"
 #include "RespType.hpp"
+#include "utils.hpp"
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -7,7 +8,6 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <variant>
 
 StreamValue::StreamEntryId StreamValue::getTopEntry() const {
   if (mStreams.empty()) {
@@ -59,26 +59,6 @@ StreamValue::StreamEntryId
 RedisStore::addStreamEntry(const std::string &key, const std::string &entry_id,
                            StreamValue::StreamEntry entry) {
 
-  using EntryIdPart = std::variant<uint64_t, std::string>;
-  auto parseEntryId =
-      [](const std::string &entry_id) -> std::array<EntryIdPart, 2> {
-    std::size_t hyphen_pos = entry_id.find("-");
-    if (hyphen_pos == std::string::npos) {
-      throw std::runtime_error("Invalid entry_id for stream");
-    }
-
-    auto parsePart = [](const std::string &s) -> EntryIdPart {
-      try {
-        return std::stoull(s);
-      } catch (...) {
-        return s;
-      }
-    };
-
-    return {parsePart(entry_id.substr(0, hyphen_pos)),
-            parsePart(entry_id.substr(hyphen_pos + 1))};
-  };
-
   auto nowMs = []() -> uint64_t {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::system_clock::now().time_since_epoch())
@@ -104,25 +84,7 @@ RedisStore::addStreamEntry(const std::string &key, const std::string &entry_id,
     return saved_entry_id;
   }
 
-  auto [part1, part2] = parseEntryId(entry_id);
-  std::optional<uint64_t> timestamp, sequence;
-
-  auto extractPart = [](const EntryIdPart &part,
-                        std::optional<uint64_t> &target, const char *which) {
-    if (auto p = std::get_if<uint64_t>(&part)) {
-      target = *p;
-    } else if (auto str = std::get_if<std::string>(&part)) {
-      if (*str != "*") {
-        throw std::runtime_error(
-            std::string("Invalid entry_id component in XADD: ") + which);
-      }
-    } else {
-      throw std::runtime_error("Unhandled variant type in entry_id part");
-    }
-  };
-
-  extractPart(part1, timestamp, "timestamp");
-  extractPart(part2, sequence, "sequence");
+  auto [timestamp, sequence] = parsePartialStreamEntryId(entry_id);
 
   if (timestamp == 0 && sequence == 0) {
     throw std::runtime_error(
