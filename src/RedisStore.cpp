@@ -1,4 +1,5 @@
 #include "RedisStore.hpp"
+#include "RespType.hpp"
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -6,7 +7,6 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
 #include <variant>
 
 StreamValue::StreamEntryId StreamValue::getTopEntry() const {
@@ -15,6 +15,33 @@ StreamValue::StreamEntryId StreamValue::getTopEntry() const {
   }
   auto it = mStreams.rbegin();
   return it->first;
+}
+
+std::unique_ptr<RespArray>
+StreamValue::serializeRangeIntoResp(StreamIterator beginIt,
+                                    StreamIterator endIt) const {
+  if (beginIt == StreamIterator{})
+    beginIt = mStreams.begin();
+  if (endIt == StreamIterator{})
+    endIt = mStreams.end();
+
+  auto resp_array = std::make_unique<RespArray>();
+  for (auto it = beginIt; it != endIt; ++it) {
+    auto entry_array = std::make_unique<RespArray>();
+    auto stream_id = it->first;
+    auto stream_id_str =
+        std::to_string(stream_id.at(0)) + "-" + std::to_string(stream_id.at(1));
+    entry_array->add(std::make_unique<RespBulkString>(stream_id_str));
+    auto values_array = std::make_unique<RespArray>();
+    for (auto &[key, value] : it->second) {
+      values_array->add(std::make_unique<RespBulkString>(key));
+      values_array->add(std::make_unique<RespBulkString>(value));
+    }
+    entry_array->add(std::move(values_array));
+    resp_array->add(std::move(entry_array));
+  }
+
+  return resp_array;
 }
 
 void RedisStore::setString(const std::string &key, const std::string &value,
@@ -141,7 +168,13 @@ RedisStore::addStreamEntry(const std::string &key, const std::string &entry_id,
             "Unsupported format: sequence without timestamp");
       }
       uint64_t ts = nowMs();
-      saved_entry_id = {ts, generateSequenceNumber(ts)};
+      auto [top_ts, top_seq] = stream.getTopEntry();
+      if (ts < top_ts) {
+        throw std::logic_error(
+            "Generated timestamp is smaller than top entry's timestamp");
+      }
+      uint64_t seq = (ts == top_ts ? top_seq + 1 : generateSequenceNumber(ts));
+      saved_entry_id = {ts, seq};
     }
 
     stream.addEntry(saved_entry_id, std::move(entry));

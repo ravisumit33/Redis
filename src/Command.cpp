@@ -273,3 +273,44 @@ XaddCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
     return result;
   }
 }
+
+CommandRegistrar<XrangeCommand> XrangeCommand::registrar("XRANGE");
+
+std::vector<std::unique_ptr<RespType>>
+XrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                           const AppConfig &config, unsigned socket_fd) {
+
+  std::vector<std::unique_ptr<RespType>> result;
+  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+
+  auto store_val_ptr = RedisStore::instance().get(store_key);
+  if (!store_val_ptr ||
+      (*store_val_ptr)->getType() != RedisStoreValue::STREAM) {
+    result.push_back(std::make_unique<RespArray>());
+    return result;
+  }
+
+  auto stream_entry_id_start =
+      static_cast<RespBulkString &>(*args.at(1)).getValue();
+  auto stream_entry_id_end =
+      static_cast<RespBulkString &>(*args.at(2)).getValue();
+
+  auto parseEntryId = [](const std::string &s) -> StreamValue::StreamEntryId {
+    std::size_t hyphen_pos = s.find("-");
+    uint64_t timestamp = std::stoull(s.substr(0, hyphen_pos));
+    uint64_t sequence = 0;
+    if (hyphen_pos != std::string::npos) {
+      sequence = std::stoull(s.substr(hyphen_pos + 1));
+    }
+    return {timestamp, sequence};
+  };
+
+  auto stream_val = static_cast<StreamValue &>(**store_val_ptr);
+  auto entry_id_start = parseEntryId(stream_entry_id_start);
+  auto entry_id_end = parseEntryId(stream_entry_id_end);
+  auto it1 = stream_val.lowerBound(entry_id_start);
+  auto it2 = stream_val.upperBound(entry_id_end);
+
+  result.push_back(stream_val.serializeRangeIntoResp(it1, it2));
+  return result;
+}

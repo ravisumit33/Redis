@@ -1,5 +1,6 @@
 #pragma once
 
+#include "RespType.hpp"
 #include <chrono>
 #include <cstdint>
 #include <map>
@@ -69,15 +70,22 @@ class StreamValue : public RedisStoreValue {
 public:
   using StreamEntry = std::unordered_map<std::string, std::string>;
   using StreamEntryId = std::array<uint64_t, 2>;
+  using StreamIterator = std::map<StreamEntryId, StreamEntry>::const_iterator;
 
   virtual std::string serialize() const override {
-    // TODO: Implement it
-    return "";
+    return serializeRangeIntoResp()->serialize();
   }
 
   virtual std::unique_ptr<RedisStoreValue> clone() const override {
     return std::make_unique<StreamValue>(*this);
   };
+
+  StreamIterator begin() const { return mStreams.begin(); }
+  StreamIterator end() const { return mStreams.end(); }
+
+  std::unique_ptr<RespArray>
+  serializeRangeIntoResp(StreamIterator beginIt = {},
+                         StreamIterator endIt = {}) const;
 
   StreamValue() : RedisStoreValue(STREAM) {}
 
@@ -86,6 +94,14 @@ public:
   }
 
   StreamEntryId getTopEntry() const;
+
+  StreamIterator lowerBound(const StreamEntryId &entry_id) const {
+    return mStreams.lower_bound(entry_id);
+  }
+
+  StreamIterator upperBound(const StreamEntryId &entry_id) const {
+    return mStreams.upper_bound(entry_id);
+  }
 
 private:
   std::map<StreamEntryId, StreamEntry> mStreams;

@@ -11,7 +11,19 @@ class Command {
 public:
   virtual ~Command() = default;
 
-  enum Type { ECHO, PING, SET, GET, INFO, REPLCONF, PSYNC, WAIT, TYPE, XADD };
+  enum Type {
+    ECHO,
+    PING,
+    SET,
+    GET,
+    INFO,
+    REPLCONF,
+    PSYNC,
+    WAIT,
+    TYPE,
+    XADD,
+    XRANGE
+  };
 
   std::vector<std::unique_ptr<RespType>>
   execute(const std::vector<std::unique_ptr<RespType>> &args,
@@ -227,5 +239,22 @@ private:
       const std::vector<std::unique_ptr<RespType>> &args) override {
     std::size_t nargs = args.size();
     return (nargs >= 4 && nargs % 2 == 0);
+  }
+};
+
+class XrangeCommand : public Command {
+public:
+  XrangeCommand() : Command(XRANGE) {}
+
+private:
+  static CommandRegistrar<XrangeCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              const AppConfig &config, unsigned socket_fd) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 3;
   }
 };

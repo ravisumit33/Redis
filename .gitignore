@@ -48,7 +48,4 @@ _deps
 build*/
 vcpkg_installed
 
-t*.hpp
-t*.cpp
-
 .DS_Store
