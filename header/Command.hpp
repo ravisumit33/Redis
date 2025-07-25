@@ -273,6 +273,7 @@ private:
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
-    return args.size() == 3;
+    std::size_t nargs = args.size();
+    return (nargs >= 3) && (nargs % 2 == 1);
   }
 };

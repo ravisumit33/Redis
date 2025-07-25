@@ -328,26 +328,30 @@ XreadCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
         std::make_unique<RespError>("Unsupported read_type arg: " + read_type));
     return result;
   }
+  auto resp_array = std::make_unique<RespArray>();
 
-  auto store_key = static_cast<RespBulkString &>(*args.at(1)).getValue();
+  std::size_t pairs_count = (args.size() - 1) / 2;
+  for (std::size_t i = 0; i < pairs_count; ++i) {
+    auto store_key = static_cast<RespBulkString &>(*args.at(1 + i)).getValue();
 
-  auto store_val_ptr = RedisStore::instance().get(store_key);
-  if (!store_val_ptr ||
-      (*store_val_ptr)->getType() != RedisStoreValue::STREAM) {
-    result.push_back(std::make_unique<RespArray>());
-    return result;
+    auto store_val_ptr = RedisStore::instance().get(store_key);
+    if (!store_val_ptr ||
+        (*store_val_ptr)->getType() != RedisStoreValue::STREAM) {
+      result.push_back(std::make_unique<RespArray>());
+      return result;
+    }
+
+    auto stream_val = static_cast<StreamValue &>(**store_val_ptr);
+    auto stream_entry_id_start =
+        static_cast<RespBulkString &>(*args.at(1 + i + pairs_count)).getValue();
+    auto entry_id_start = parseStreamEntryId(stream_entry_id_start);
+    StreamValue::StreamIterator it = stream_val.upperBound(entry_id_start);
+    auto key_array = std::make_unique<RespArray>();
+    key_array->add(std::make_unique<RespBulkString>(store_key))
+        ->add(stream_val.serializeRangeIntoResp(it));
+    resp_array->add(std::move(key_array));
   }
 
-  auto stream_val = static_cast<StreamValue &>(**store_val_ptr);
-  auto stream_entry_id_start =
-      static_cast<RespBulkString &>(*args.at(2)).getValue();
-  auto entry_id_start = parseStreamEntryId(stream_entry_id_start);
-  StreamValue::StreamIterator it = stream_val.upperBound(entry_id_start);
-  auto resp_array = std::make_unique<RespArray>();
-  auto key_array = std::make_unique<RespArray>();
-  key_array->add(std::make_unique<RespBulkString>(store_key))
-      ->add(stream_val.serializeRangeIntoResp(it));
-  resp_array->add(std::move(key_array));
   result.push_back(std::move(resp_array));
   return result;
 }
