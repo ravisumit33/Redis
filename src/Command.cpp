@@ -405,3 +405,14 @@ IncrCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   result.push_back(std::make_unique<RespInt>(int_val));
   return result;
 }
+
+CommandRegistrar<MultiCommand> MultiCommand::registrar("MULTI");
+
+std::vector<std::unique_ptr<RespType>>
+MultiCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                          const AppConfig &config, unsigned socket_fd) {
+
+  std::vector<std::unique_ptr<RespType>> result;
+  result.push_back(std::make_unique<RespString>("OK"));
+  return result;
+}

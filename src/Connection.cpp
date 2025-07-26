@@ -85,7 +85,7 @@ void ClientConnection::handleConnection() {
         } catch (const std::exception &ex) {
           std::cerr << "Command execution error [fd=" << getSocketFd()
                     << "]: " << ex.what() << std::endl;
-          RespError errResponse("ERR " + std::string(ex.what()));
+          RespError errResponse(ex.what());
           writeToSocket(getSocketFd(), errResponse.serialize());
         }
       }

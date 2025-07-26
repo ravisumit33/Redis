@@ -24,7 +24,8 @@ public:
     XADD,
     XRANGE,
     XREAD,
-    INCR
+    INCR,
+    MULTI
   };
 
   std::vector<std::unique_ptr<RespType>>
@@ -293,5 +294,22 @@ private:
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
     return args.size() == 1;
+  }
+};
+
+class MultiCommand : public Command {
+public:
+  MultiCommand() : Command(MULTI) {}
+
+private:
+  static CommandRegistrar<MultiCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              const AppConfig &config, unsigned socket_fd) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 0;
   }
 };
