@@ -1,5 +1,6 @@
 #include "Connection.hpp"
 #include "AppConfig.hpp"
+#include "Command.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "RespTypeParser.hpp"
@@ -58,29 +59,35 @@ void ClientConnection::handleConnection() {
         try {
           auto [command, args] = parseCommand(ss);
 
-          if (getConfig().isMaster()) {
-            if (command->getType() == Command::REPLCONF) {
-              auto first_arg =
-                  static_cast<RespBulkString &>(*args.at(0)).getValue();
-              if (first_arg == "listening-port") {
-                addAsSlave();
-                std::cout << "Client registered as slave [fd=" << getSocketFd()
-                          << "]" << std::endl;
+          if (isInTransaction() && !command->isControlCommand()) {
+            queueCommand(command, std::move(args));
+          } else {
+
+            if (getConfig().isMaster()) {
+              if (command->getType() == Command::REPLCONF) {
+                auto first_arg =
+                    static_cast<RespBulkString &>(*args.at(0)).getValue();
+                if (first_arg == "listening-port") {
+                  addAsSlave();
+                  std::cout
+                      << "Client registered as slave [fd=" << getSocketFd()
+                      << "]" << std::endl;
+                }
               }
             }
-          }
 
-          auto responses = command->execute(args, getConfig(), getSocketFd());
-          std::string resp;
-          for (const auto &response : responses) {
-            resp += response->serialize();
-          }
-          writeToSocket(getSocketFd(), resp);
+            auto responses = command->execute(args, *this);
+            std::string resp;
+            for (const auto &response : responses) {
+              resp += response->serialize();
+            }
+            writeToSocket(getSocketFd(), resp);
 
-          if (getConfig().isMaster() && command->isWriteCommand()) {
-            auto &master_state = ReplicationManager::getInstance().master();
-            master_state.updateReplOffset(data.size());
-            master_state.propagateToSlave(data);
+            if (getConfig().isMaster() && command->isWriteCommand()) {
+              auto &master_state = ReplicationManager::getInstance().master();
+              master_state.updateReplOffset(data.size());
+              master_state.propagateToSlave(data);
+            }
           }
         } catch (const std::exception &ex) {
           std::cerr << "Command execution error [fd=" << getSocketFd()
@@ -94,6 +101,19 @@ void ClientConnection::handleConnection() {
     std::cerr << "Client connection error [fd=" << getSocketFd()
               << "]: " << exp.what() << std::endl;
   }
+}
+
+std::unique_ptr<RespType> ClientConnection::executeTransaction() {
+  auto resp_array = std::make_unique<RespArray>();
+  for (const auto &[cmd, args] : m_queued_commands) {
+    auto result = cmd->execute(args, *this);
+    for (auto &res : result) {
+      resp_array->add(std::move(res));
+    }
+  }
+  m_queued_commands.clear();
+  m_in_transaction = false;
+  return resp_array;
 }
 
 void ServerConnection::sendCommand(
@@ -231,7 +251,7 @@ void ServerConnection::configurePsync() {
     std::size_t bytes_recorded = 0;
     while (input_stream.peek() != std::char_traits<char>::eof()) {
       auto [command, args] = parseCommand(input_stream);
-      auto responses = command->execute(args, getConfig(), getSocketFd());
+      auto responses = command->execute(args, *this);
       std::string resp;
       for (const auto &response : responses) {
         resp += response->serialize();
@@ -297,7 +317,7 @@ void ServerConnection::handleConnection() {
       std::size_t bytes_recorded = 0;
       while (ss.peek() != std::char_traits<char>::eof()) {
         auto [command, args] = parseCommand(ss);
-        auto responses = command->execute(args, getConfig(), getSocketFd());
+        auto responses = command->execute(args, *this);
         std::string serialized_response;
         for (const auto &response : responses) {
           serialized_response += response->serialize();

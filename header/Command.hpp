@@ -1,11 +1,12 @@
 #pragma once
 
-#include "AppConfig.hpp"
 #include "Registrar.hpp"
 #include "Registry.hpp"
 #include "RespType.hpp"
 #include <memory>
 #include <vector>
+
+class Connection;
 
 class Command {
 public:
@@ -25,12 +26,13 @@ public:
     XRANGE,
     XREAD,
     INCR,
-    MULTI
+    MULTI,
+    EXEC
   };
 
   std::vector<std::unique_ptr<RespType>>
   execute(const std::vector<std::unique_ptr<RespType>> &args,
-          const AppConfig &config, unsigned socket_fd) {
+          Connection &connection) {
     bool args_valid = validateArgs(args);
     if (!args_valid) {
 
@@ -38,12 +40,14 @@ public:
       result.push_back(std::make_unique<RespError>("Invalid args"));
       return result;
     }
-    return executeImpl(args, config, socket_fd);
+    return executeImpl(args, connection);
   }
 
   Type getType() const { return m_type; }
 
   bool isWriteCommand() const;
+
+  bool isControlCommand() const;
 
 protected:
   Command(Type t) : m_type(t) {}
@@ -61,7 +65,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) = 0;
+              Connection &connection) = 0;
 
   virtual bool
   validateArgsImpl(const std::vector<std::unique_ptr<RespType>> &args) = 0;
@@ -83,7 +87,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -100,7 +104,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -117,7 +121,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -134,7 +138,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -151,7 +155,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -168,7 +172,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -185,7 +189,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -202,7 +206,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -219,7 +223,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -236,7 +240,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -254,7 +258,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -271,7 +275,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -289,7 +293,7 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
@@ -306,7 +310,24 @@ private:
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              const AppConfig &config, unsigned socket_fd) override;
+              Connection &connection) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 0;
+  }
+};
+
+class ExecCommand : public Command {
+public:
+  ExecCommand() : Command(EXEC) {}
+
+private:
+  static CommandRegistrar<ExecCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              Connection &connection) override;
 
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {

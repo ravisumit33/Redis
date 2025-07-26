@@ -1,11 +1,10 @@
 #include "Command.hpp"
 #include "AppConfig.hpp"
+#include "Connection.hpp"
 #include "RedisStore.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "utils.hpp"
-#include <algorithm>
-#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -13,19 +12,24 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 bool Command::isWriteCommand() const {
-  static std::array<Type, 1> write_commands = {SET};
-  return std::any_of(write_commands.begin(), write_commands.end(),
-                     [this](Type &t) { return t == getType(); });
+  static const std::unordered_set<Type> write_commands = {SET};
+  return write_commands.contains(getType());
+}
+
+bool Command::isControlCommand() const {
+  static const std::unordered_set<Type> control_commands = {EXEC};
+  return control_commands.contains(getType());
 }
 
 CommandRegistrar<EchoCommand> EchoCommand::registrar("ECHO");
 
 std::vector<std::unique_ptr<RespType>>
 EchoCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config, unsigned socket_fd) {
+                         Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
   result.push_back(args.at(0)->clone());
   return result;
@@ -35,7 +39,7 @@ CommandRegistrar<PingCommand> PingCommand::registrar("PING");
 
 std::vector<std::unique_ptr<RespType>>
 PingCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config, unsigned socket_fd) {
+                         Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
   result.push_back(std::make_unique<RespString>("PONG"));
   return result;
@@ -45,7 +49,7 @@ CommandRegistrar<SetCommand> SetCommand::registrar("SET");
 
 std::vector<std::unique_ptr<RespType>>
 SetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                        const AppConfig &config, unsigned socket_fd) {
+                        Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
 
   size_t nargs = args.size();
@@ -83,7 +87,7 @@ CommandRegistrar<GetCommand> GetCommand::registrar("GET");
 
 std::vector<std::unique_ptr<RespType>>
 GetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                        const AppConfig &config, unsigned socket_fd) {
+                        Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
 
   auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -109,8 +113,9 @@ CommandRegistrar<InfoCommand> InfoCommand::registrar("INFO");
 
 std::vector<std::unique_ptr<RespType>>
 InfoCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config, unsigned socket_fd) {
+                         Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
+  const AppConfig &config = connection.getConfig();
 
   auto arg = static_cast<RespBulkString &>(*args.at(0)).getValue();
   if (arg != "replication") {
@@ -137,8 +142,11 @@ CommandRegistrar<ReplConfCommand> ReplConfCommand::registrar("REPLCONF");
 
 std::vector<std::unique_ptr<RespType>>
 ReplConfCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                             const AppConfig &config, unsigned socket_fd) {
+                             Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
+  const AppConfig &config = connection.getConfig();
+  unsigned socket_fd = connection.getSocketFd();
+
   if (config.isMaster()) {
     auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
     auto arg2 = static_cast<RespBulkString &>(*args.at(1)).getValue();
@@ -181,7 +189,7 @@ CommandRegistrar<PsyncCommand> PsyncCommand::registrar("PSYNC");
 
 std::vector<std::unique_ptr<RespType>>
 PsyncCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                          const AppConfig &config, unsigned socket_fd) {
+                          Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
 
   auto arg = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -216,7 +224,7 @@ CommandRegistrar<WaitCommand> WaitCommand::registrar("WAIT");
 
 std::vector<std::unique_ptr<RespType>>
 WaitCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config, unsigned socket_fd) {
+                         Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
 
   auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -235,7 +243,7 @@ CommandRegistrar<TypeCommand> TypeCommand::registrar("TYPE");
 
 std::vector<std::unique_ptr<RespType>>
 TypeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config, unsigned socket_fd) {
+                         Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
   auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
   auto store_val_ptr = RedisStore::instance().get(arg1);
@@ -252,7 +260,7 @@ CommandRegistrar<XaddCommand> XaddCommand::registrar("XADD");
 
 std::vector<std::unique_ptr<RespType>>
 XaddCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config, unsigned socket_fd) {
+                         Connection &connection) {
 
   std::vector<std::unique_ptr<RespType>> result;
   auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -283,7 +291,7 @@ CommandRegistrar<XrangeCommand> XrangeCommand::registrar("XRANGE");
 
 std::vector<std::unique_ptr<RespType>>
 XrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                           const AppConfig &config, unsigned socket_fd) {
+                           Connection &connection) {
 
   std::vector<std::unique_ptr<RespType>> result;
   auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -311,7 +319,7 @@ CommandRegistrar<XreadCommand> XreadCommand::registrar("XREAD");
 
 std::vector<std::unique_ptr<RespType>>
 XreadCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                          const AppConfig &config, unsigned socket_fd) {
+                          Connection &connection) {
 
   std::vector<std::unique_ptr<RespType>> result;
   std::size_t arg_idx = 0;
@@ -377,7 +385,7 @@ CommandRegistrar<IncrCommand> IncrCommand::registrar("INCR");
 
 std::vector<std::unique_ptr<RespType>>
 IncrCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         const AppConfig &config, unsigned socket_fd) {
+                         Connection &connection) {
 
   std::vector<std::unique_ptr<RespType>> result;
   auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -410,9 +418,27 @@ CommandRegistrar<MultiCommand> MultiCommand::registrar("MULTI");
 
 std::vector<std::unique_ptr<RespType>>
 MultiCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                          const AppConfig &config, unsigned socket_fd) {
+                          Connection &connection) {
 
   std::vector<std::unique_ptr<RespType>> result;
+  auto &client_connection = static_cast<ClientConnection &>(connection);
+  client_connection.beginTransaction();
   result.push_back(std::make_unique<RespString>("OK"));
+  return result;
+}
+
+CommandRegistrar<ExecCommand> ExecCommand::registrar("EXEC");
+
+std::vector<std::unique_ptr<RespType>>
+ExecCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                         Connection &connection) {
+
+  std::vector<std::unique_ptr<RespType>> result;
+  auto &client_connection = static_cast<ClientConnection &>(connection);
+  if (!client_connection.isInTransaction()) {
+    result.push_back(std::make_unique<RespError>("EXEC without MULTI"));
+    return result;
+  }
+  result.push_back(client_connection.executeTransaction());
   return result;
 }

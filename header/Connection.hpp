@@ -6,15 +6,16 @@
 #include <memory>
 #include <vector>
 
+class Command;
+
 class Connection {
 public:
   Connection(const unsigned socket_fd, const AppConfig &config);
 
-  ~Connection();
+  virtual ~Connection();
 
   virtual void handleConnection() = 0;
 
-protected:
   const AppConfig &getConfig() const { return m_config; }
 
   const unsigned getSocketFd() const { return m_socket_fd; }
@@ -33,10 +34,28 @@ public:
 
   ~ClientConnection();
 
+  void beginTransaction() {
+    m_in_transaction = true;
+    m_queued_commands.clear();
+  }
+
+  void queueCommand(Command *cmd, std::vector<std::unique_ptr<RespType>> args) {
+    m_queued_commands.emplace_back(cmd, std::move(args));
+  }
+
+  std::unique_ptr<RespType> executeTransaction();
+
+  bool isInTransaction() { return m_in_transaction == true; }
+
 private:
   void addAsSlave();
 
   bool m_is_slave;
+
+  bool m_in_transaction = false;
+
+  std::vector<std::pair<Command *, std::vector<std::unique_ptr<RespType>>>>
+      m_queued_commands;
 };
 
 class ServerConnection : public Connection {
