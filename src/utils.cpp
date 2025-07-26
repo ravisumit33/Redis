@@ -167,3 +167,25 @@ parsePartialStreamEntryId(const std::string &entry_id) {
 
   return {timestamp, sequence};
 }
+
+std::unique_ptr<RespArray> serializeStreamEntries(
+    std::vector<std::pair<StreamValue::StreamEntryId, StreamValue::StreamEntry>>
+        entries) {
+
+  auto resp_array = std::make_unique<RespArray>();
+  for (auto &[entry_id, entry] : entries) {
+    auto entry_array = std::make_unique<RespArray>();
+    auto entry_id_str =
+        std::to_string(entry_id.at(0)) + "-" + std::to_string(entry_id.at(1));
+    entry_array->add(std::make_unique<RespBulkString>(std::move(entry_id_str)));
+    auto values_array = std::make_unique<RespArray>();
+    for (auto &[key, value] : entry) {
+      values_array->add(std::make_unique<RespBulkString>(std::move(key)));
+      values_array->add(std::make_unique<RespBulkString>(std::move(value)));
+    }
+    entry_array->add(std::move(values_array));
+    resp_array->add(std::move(entry_array));
+  }
+
+  return resp_array;
+}

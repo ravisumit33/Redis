@@ -1,12 +1,14 @@
 #pragma once
 
 #include "Command.hpp"
+#include "RedisStore.hpp"
 #include "RespType.hpp"
 #include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 uint8_t hexCharToInt(char c);
@@ -26,3 +28,7 @@ std::array<std::optional<uint64_t>, 2>
 parsePartialStreamEntryId(const std::string &entry_id);
 
 std::array<uint64_t, 2> parseStreamEntryId(const std::string &entry_id);
+
+std::unique_ptr<RespArray> serializeStreamEntries(
+    std::vector<std::pair<StreamValue::StreamEntryId, StreamValue::StreamEntry>>
+        entries);

@@ -1,15 +1,17 @@
 #pragma once
 
-#include "RespType.hpp"
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 class RedisStoreValue {
 public:
@@ -30,8 +32,6 @@ public:
   }
 
   virtual std::unique_ptr<RedisStoreValue> clone() const = 0;
-
-  virtual std::string serialize() const = 0;
 
   Type getType() const { return m_type; }
 
@@ -56,7 +56,7 @@ public:
               std::optional<std::chrono::steady_clock::time_point> exp)
       : RedisStoreValue(STRING, exp), mValue(val) {}
 
-  virtual std::string serialize() const override { return mValue; }
+  std::string getValue() const { return mValue; }
 
   virtual std::unique_ptr<RedisStoreValue> clone() const override {
     return std::make_unique<StringValue>(*this);
@@ -72,20 +72,12 @@ public:
   using StreamEntryId = std::array<uint64_t, 2>;
   using StreamIterator = std::map<StreamEntryId, StreamEntry>::const_iterator;
 
-  virtual std::string serialize() const override {
-    return serializeRangeIntoResp()->serialize();
-  }
-
   virtual std::unique_ptr<RedisStoreValue> clone() const override {
     return std::make_unique<StreamValue>(*this);
   };
 
   StreamIterator begin() const { return mStreams.begin(); }
   StreamIterator end() const { return mStreams.end(); }
-
-  std::unique_ptr<RespArray>
-  serializeRangeIntoResp(StreamIterator beginIt = {},
-                         StreamIterator endIt = {}) const;
 
   StreamValue() : RedisStoreValue(STREAM) {}
 
@@ -121,6 +113,20 @@ public:
 
   bool keyExists(const std::string &key) const;
 
+  std::vector<std::pair<StreamValue::StreamEntryId, StreamValue::StreamEntry>>
+  getStreamEntriesInRange(const std::string &store_key,
+                          const std::string &entry_id_start,
+                          const std::string &entry_id_end) const;
+
+  std::pair<bool,
+            std::unordered_map<
+                std::string, std::vector<std::pair<StreamValue::StreamEntryId,
+                                                   StreamValue::StreamEntry>>>>
+  getStreamEntriesAfterAny(
+      const std::vector<std::string> &store_keys,
+      const std::vector<std::string> &entry_ids_start,
+      std::optional<uint64_t> timeout_ms = std::nullopt) const;
+
   static RedisStore &instance() {
     static RedisStore instance;
     return instance;
@@ -129,5 +135,6 @@ public:
 private:
   RedisStore() = default;
   std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>> mStore;
-  mutable std::mutex mMutex;
+  mutable std::shared_mutex mMutex;
+  mutable std::condition_variable_any m_cv;
 };

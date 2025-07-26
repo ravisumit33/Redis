@@ -10,7 +10,7 @@ public:
   using Factory = std::function<std::unique_ptr<Value>()>;
 
   void add(const Key &k, Factory factory) {
-    std::unique_lock<std::shared_mutex> lock(mMutex);
+    std::lock_guard<std::shared_mutex> lock(mMutex);
     mFactoryMap[k] = factory;
   }
 

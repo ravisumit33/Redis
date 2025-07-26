@@ -91,6 +91,8 @@ public:
     return ret;
   }
 
+  bool empty() const { return m_value.empty(); }
+
   std::vector<std::unique_ptr<RespType>> release() {
     return std::move(m_value);
   }
@@ -113,7 +115,7 @@ private:
 
 class RespBulkString : public RespType {
 public:
-  RespBulkString(std::string val, bool lastCrlf = true)
+  RespBulkString(std::string val = "", bool lastCrlf = true)
       : RespType(BULK_STRING), m_value(std::move(val)), m_lastCrlf(lastCrlf) {}
 
   virtual std::unique_ptr<RespType> clone() override {

@@ -96,7 +96,12 @@ GetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   }
 
   auto return_value = std::move(stored_value.value());
-  result.push_back(std::make_unique<RespBulkString>(return_value->serialize()));
+  if (return_value->getType() != RedisStoreValue::STRING) {
+    result.push_back(std::make_unique<RespError>("Invalid Key"));
+    return result;
+  }
+  result.push_back(std::make_unique<RespBulkString>(
+      static_cast<StringValue &>(*return_value).getValue()));
   return result;
 }
 
@@ -286,7 +291,8 @@ XrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   auto store_val_ptr = RedisStore::instance().get(store_key);
   if (!store_val_ptr ||
       (*store_val_ptr)->getType() != RedisStoreValue::STREAM) {
-    result.push_back(std::make_unique<RespArray>());
+    result.push_back(
+        std::make_unique<RespError>("Key doesn't contain a stream"));
     return result;
   }
 
@@ -295,22 +301,9 @@ XrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   auto stream_entry_id_end =
       static_cast<RespBulkString &>(*args.at(2)).getValue();
 
-  auto stream_val = static_cast<StreamValue &>(**store_val_ptr);
-  StreamValue::StreamIterator it1, it2;
-  if (stream_entry_id_start == "-") {
-    it1 = stream_val.begin();
-  } else {
-    auto entry_id_start = parseStreamEntryId(stream_entry_id_start);
-    it1 = stream_val.lowerBound(entry_id_start);
-  }
-  if (stream_entry_id_end == "+") {
-    it2 = stream_val.end();
-  } else {
-    auto entry_id_end = parseStreamEntryId(stream_entry_id_end);
-    it2 = stream_val.upperBound(entry_id_end);
-  }
-
-  result.push_back(stream_val.serializeRangeIntoResp(it1, it2));
+  auto stream_entries = RedisStore::instance().getStreamEntriesInRange(
+      store_key, stream_entry_id_start, stream_entry_id_end);
+  result.push_back(serializeStreamEntries(std::move(stream_entries)));
   return result;
 }
 
@@ -321,35 +314,59 @@ XreadCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                           const AppConfig &config, unsigned socket_fd) {
 
   std::vector<std::unique_ptr<RespType>> result;
-  auto read_type = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  std::size_t arg_idx = 0;
+  std::optional<uint64_t> timeout_ms;
+  auto first_arg = static_cast<RespBulkString &>(*args.at(arg_idx)).getValue();
+  ++arg_idx;
+  if (first_arg == "block") {
+    timeout_ms = std::stoull(
+        static_cast<RespBulkString &>(*args.at(arg_idx)).getValue());
+    ++arg_idx;
+    auto second_arg =
+        static_cast<RespBulkString &>(*args.at(arg_idx)).getValue();
+    ++arg_idx;
 
-  if (read_type != "streams") {
-    result.push_back(
-        std::make_unique<RespError>("Unsupported read_type arg: " + read_type));
-    return result;
-  }
-  auto resp_array = std::make_unique<RespArray>();
-
-  std::size_t pairs_count = (args.size() - 1) / 2;
-  for (std::size_t i = 0; i < pairs_count; ++i) {
-    auto store_key = static_cast<RespBulkString &>(*args.at(1 + i)).getValue();
-
-    auto store_val_ptr = RedisStore::instance().get(store_key);
-    if (!store_val_ptr ||
-        (*store_val_ptr)->getType() != RedisStoreValue::STREAM) {
-      result.push_back(std::make_unique<RespArray>());
+    if (second_arg != "streams") {
+      result.push_back(std::make_unique<RespError>(
+          "Unsupported read_type arg: " + second_arg));
       return result;
     }
+  } else if (first_arg != "streams") {
+    result.push_back(
+        std::make_unique<RespError>("Unsupported read_type arg: " + first_arg));
+    return result;
+  }
 
-    auto stream_val = static_cast<StreamValue &>(**store_val_ptr);
+  std::size_t pairs_count = (args.size() - arg_idx) / 2;
+  std::vector<std::string> store_keys, entry_ids_start;
+  for (std::size_t i = 0; i < pairs_count; ++i) {
+    auto store_key =
+        static_cast<RespBulkString &>(*args.at(arg_idx + i)).getValue();
     auto stream_entry_id_start =
-        static_cast<RespBulkString &>(*args.at(1 + i + pairs_count)).getValue();
-    auto entry_id_start = parseStreamEntryId(stream_entry_id_start);
-    StreamValue::StreamIterator it = stream_val.upperBound(entry_id_start);
-    auto key_array = std::make_unique<RespArray>();
-    key_array->add(std::make_unique<RespBulkString>(store_key))
-        ->add(stream_val.serializeRangeIntoResp(it));
-    resp_array->add(std::move(key_array));
+        static_cast<RespBulkString &>(*args.at(arg_idx + i + pairs_count))
+            .getValue();
+    store_keys.push_back(store_key);
+    entry_ids_start.push_back(stream_entry_id_start);
+  }
+  auto [timed_out, stream_entries_map] =
+      RedisStore::instance().getStreamEntriesAfterAny(
+          store_keys, entry_ids_start, timeout_ms);
+
+  if (timed_out) {
+    result.push_back(std::make_unique<RespBulkString>());
+    return result;
+  }
+
+  auto resp_array = std::make_unique<RespArray>();
+
+  for (const auto &store_key : store_keys) {
+    if (stream_entries_map.contains(store_key)) {
+      auto stream_entries = stream_entries_map[store_key];
+      auto key_array = std::make_unique<RespArray>();
+      key_array->add(std::make_unique<RespBulkString>(store_key))
+          ->add(serializeStreamEntries(stream_entries));
+      resp_array->add(std::move(key_array));
+    }
   }
 
   result.push_back(std::move(resp_array));

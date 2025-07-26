@@ -1,13 +1,17 @@
 #include "RedisStore.hpp"
-#include "RespType.hpp"
 #include "utils.hpp"
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ranges>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 StreamValue::StreamEntryId StreamValue::getTopEntry() const {
   if (mStreams.empty()) {
@@ -17,42 +21,16 @@ StreamValue::StreamEntryId StreamValue::getTopEntry() const {
   return it->first;
 }
 
-std::unique_ptr<RespArray>
-StreamValue::serializeRangeIntoResp(StreamIterator beginIt,
-                                    StreamIterator endIt) const {
-  if (beginIt == StreamIterator{})
-    beginIt = mStreams.begin();
-  if (endIt == StreamIterator{})
-    endIt = mStreams.end();
-
-  auto resp_array = std::make_unique<RespArray>();
-  for (auto it = beginIt; it != endIt; ++it) {
-    auto entry_array = std::make_unique<RespArray>();
-    auto stream_id = it->first;
-    auto stream_id_str =
-        std::to_string(stream_id.at(0)) + "-" + std::to_string(stream_id.at(1));
-    entry_array->add(std::make_unique<RespBulkString>(stream_id_str));
-    auto values_array = std::make_unique<RespArray>();
-    for (auto &[key, value] : it->second) {
-      values_array->add(std::make_unique<RespBulkString>(key));
-      values_array->add(std::make_unique<RespBulkString>(value));
-    }
-    entry_array->add(std::move(values_array));
-    resp_array->add(std::move(entry_array));
-  }
-
-  return resp_array;
-}
-
 void RedisStore::setString(const std::string &key, const std::string &value,
                            std::optional<std::chrono::milliseconds> exp) {
-  std::lock_guard<std::mutex> lock(mMutex);
+  std::lock_guard<std::shared_mutex> lock(mMutex);
   std::optional<std::chrono::steady_clock::time_point> expiry = std::nullopt;
   if (exp) {
     expiry = std::chrono::steady_clock::now() + exp.value();
   }
   auto val = std::make_unique<StringValue>(value, expiry);
   mStore.insert_or_assign(key, std::move(val));
+  m_cv.notify_all();
 }
 
 StreamValue::StreamEntryId
@@ -76,11 +54,12 @@ RedisStore::addStreamEntry(const std::string &key, const std::string &entry_id,
     uint64_t seq = generateSequenceNumber(ts);
     saved_entry_id = {ts, seq};
 
-    std::lock_guard<std::mutex> lock(mMutex);
+    std::lock_guard<std::shared_mutex> lock(mMutex);
     auto [stream_ptr, inserted] =
         mStore.try_emplace(key, std::make_unique<StreamValue>());
     static_cast<StreamValue &>(*stream_ptr->second)
         .addEntry(saved_entry_id, std::move(entry));
+    m_cv.notify_all();
     return saved_entry_id;
   }
 
@@ -91,7 +70,7 @@ RedisStore::addStreamEntry(const std::string &key, const std::string &entry_id,
         "The ID specified in XADD must be greater than 0-0");
   }
 
-  std::lock_guard<std::mutex> lock(mMutex);
+  std::lock_guard<std::shared_mutex> lock(mMutex);
   auto it = mStore.find(key);
 
   if (it == mStore.end()) {
@@ -142,12 +121,13 @@ RedisStore::addStreamEntry(const std::string &key, const std::string &entry_id,
     stream.addEntry(saved_entry_id, std::move(entry));
   }
 
+  m_cv.notify_all();
   return saved_entry_id;
 }
 
 std::optional<std::unique_ptr<RedisStoreValue>>
 RedisStore::get(const std::string &key) const {
-  std::lock_guard<std::mutex> lock(mMutex);
+  std::shared_lock<std::shared_mutex> lock(mMutex);
   auto it = mStore.find(key);
   if (it == mStore.end()) {
     return std::nullopt;
@@ -162,6 +142,108 @@ RedisStore::get(const std::string &key) const {
 }
 
 bool RedisStore::keyExists(const std::string &key) const {
-  std::lock_guard<std::mutex> lock(mMutex);
+  std::shared_lock<std::shared_mutex> lock(mMutex);
   return mStore.contains(key);
+}
+
+std::vector<std::pair<StreamValue::StreamEntryId, StreamValue::StreamEntry>>
+RedisStore::getStreamEntriesInRange(const std::string &store_key,
+                                    const std::string &entry_id_start,
+                                    const std::string &entry_id_end) const {
+  std::shared_lock<std::shared_mutex> lock(mMutex);
+
+  auto it = mStore.find(store_key);
+
+  if (it == mStore.end() || it->second->getType() != RedisStoreValue::STREAM) {
+    throw std::runtime_error("Invalid key provided for stream");
+  }
+
+  auto stream_val = static_cast<StreamValue &>(*(it->second));
+  StreamValue::StreamIterator it1, it2;
+  if (entry_id_start == "-") {
+    it1 = stream_val.begin();
+  } else {
+    it1 = stream_val.lowerBound(parseStreamEntryId(entry_id_start));
+  }
+  if (entry_id_end == "+") {
+    it2 = stream_val.end();
+  } else {
+    it2 = stream_val.upperBound(parseStreamEntryId(entry_id_end));
+  }
+
+  std::vector<std::pair<StreamValue::StreamEntryId, StreamValue::StreamEntry>>
+      ret;
+  while (it1 != it2) {
+    ret.push_back({it1->first, it1->second});
+    ++it1;
+  }
+  return ret;
+}
+
+std::pair<bool,
+          std::unordered_map<std::string,
+                             std::vector<std::pair<StreamValue::StreamEntryId,
+                                                   StreamValue::StreamEntry>>>>
+RedisStore::getStreamEntriesAfterAny(
+    const std::vector<std::string> &store_keys,
+    const std::vector<std::string> &entry_ids_start,
+    std::optional<uint64_t> timeout_ms) const {
+
+  std::optional<std::chrono::steady_clock::time_point> deadline;
+  if (timeout_ms) {
+    deadline = std::chrono::steady_clock::now() +
+               std::chrono::milliseconds(*timeout_ms);
+  }
+
+  std::unordered_map<std::string,
+                     std::vector<std::pair<StreamValue::StreamEntryId,
+                                           StreamValue::StreamEntry>>>
+      ret;
+
+  auto fillEntries = [&]() {
+    for (const auto &[store_key, entry_id_start] :
+         std::views::zip(store_keys, entry_ids_start)) {
+      auto it = mStore.find(store_key);
+
+      if (it == mStore.end() ||
+          it->second->getType() != RedisStoreValue::STREAM) {
+        throw std::runtime_error("Invalid key: " + store_key +
+                                 " provided for stream");
+      }
+
+      std::vector<
+          std::pair<StreamValue::StreamEntryId, StreamValue::StreamEntry>>
+          entries;
+
+      auto stream_val = static_cast<StreamValue &>(*(it->second));
+      StreamValue::StreamIterator it1 =
+          stream_val.upperBound(parseStreamEntryId(entry_id_start));
+
+      while (it1 != stream_val.end()) {
+        entries.push_back({it1->first, it1->second});
+        ++it1;
+      }
+
+      if (!entries.empty()) {
+        ret[store_key] = entries;
+      }
+    }
+  };
+
+  std::unique_lock<std::shared_mutex> lock(mMutex);
+  fillEntries();
+
+  bool timed_out = false;
+  if (timeout_ms && ret.empty()) {
+    while (ret.empty()) {
+      if (m_cv.wait_until(lock, *deadline) == std::cv_status::timeout) {
+        std::cout << "Dealine of " << *timeout_ms << " ms reached" << std::endl;
+        timed_out = true;
+        break;
+      }
+      fillEntries();
+    }
+  }
+
+  return {timed_out, ret};
 }
