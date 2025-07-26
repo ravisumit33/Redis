@@ -23,7 +23,8 @@ public:
     TYPE,
     XADD,
     XRANGE,
-    XREAD
+    XREAD,
+    INCR
   };
 
   std::vector<std::unique_ptr<RespType>>
@@ -275,5 +276,22 @@ private:
       const std::vector<std::unique_ptr<RespType>> &args) override {
     std::size_t nargs = args.size();
     return (nargs >= 3) && (nargs % 2 == 1);
+  }
+};
+
+class IncrCommand : public Command {
+public:
+  IncrCommand() : Command(INCR) {}
+
+private:
+  static CommandRegistrar<IncrCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              const AppConfig &config, unsigned socket_fd) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 1;
   }
 };
