@@ -77,7 +77,10 @@ public:
   };
 
   StreamIterator begin() const { return mStreams.begin(); }
+
   StreamIterator end() const { return mStreams.end(); }
+
+  bool empty() const { return mStreams.empty(); }
 
   StreamValue() : RedisStoreValue(STREAM) {}
 

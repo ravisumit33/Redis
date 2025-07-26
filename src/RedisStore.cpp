@@ -11,6 +11,7 @@
 #include <shared_mutex>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 
 StreamValue::StreamEntryId StreamValue::getTopEntry() const {
@@ -200,24 +201,39 @@ RedisStore::getStreamEntriesAfterAny(
                                            StreamValue::StreamEntry>>>
       ret;
 
+  auto stream_view = std::views::zip(store_keys, entry_ids_start) |
+                     std::views::transform([this](auto pair) {
+                       const auto &[store_key, entry_id_start] = pair;
+                       auto it = mStore.find(store_key);
+
+                       if (it == mStore.end() ||
+                           it->second->getType() != RedisStoreValue::STREAM) {
+                         throw std::runtime_error("Invalid key: " + store_key +
+                                                  " provided for stream");
+                       }
+                       auto &stream_val =
+                           static_cast<StreamValue &>(*(it->second));
+                       std::array<uint64_t, 2> start_id{0, 0};
+                       if (entry_id_start != "$") {
+                         start_id = parseStreamEntryId(entry_id_start);
+                       } else if (!stream_val.empty()) {
+                         start_id = stream_val.getTopEntry();
+                       }
+                       return std::tuple{start_id, std::cref(stream_val),
+                                         std::cref(store_key)};
+                     });
+
+  auto stream_iterable = std::vector(stream_view.begin(), stream_view.end());
+
   auto fillEntries = [&]() {
-    for (const auto &[store_key, entry_id_start] :
-         std::views::zip(store_keys, entry_ids_start)) {
-      auto it = mStore.find(store_key);
-
-      if (it == mStore.end() ||
-          it->second->getType() != RedisStoreValue::STREAM) {
-        throw std::runtime_error("Invalid key: " + store_key +
-                                 " provided for stream");
-      }
-
+    for (const auto &[start_id, stream_val_ref, store_key_ref] :
+         stream_iterable) {
       std::vector<
           std::pair<StreamValue::StreamEntryId, StreamValue::StreamEntry>>
           entries;
-
-      auto stream_val = static_cast<StreamValue &>(*(it->second));
-      StreamValue::StreamIterator it1 =
-          stream_val.upperBound(parseStreamEntryId(entry_id_start));
+      const auto &stream_val = stream_val_ref.get();
+      const auto &store_key = store_key_ref.get();
+      StreamValue::StreamIterator it1 = stream_val.upperBound(start_id);
 
       while (it1 != stream_val.end()) {
         entries.push_back({it1->first, it1->second});
