@@ -235,13 +235,21 @@ RedisStore::getStreamEntriesAfterAny(
 
   bool timed_out = false;
   if (timeout_ms && ret.empty()) {
-    while (ret.empty()) {
-      if (m_cv.wait_until(lock, *deadline) == std::cv_status::timeout) {
-        std::cout << "Dealine of " << *timeout_ms << " ms reached" << std::endl;
-        timed_out = true;
-        break;
+    if (*timeout_ms == 0) {
+      while (ret.empty()) {
+        m_cv.wait(lock);
+        fillEntries();
       }
-      fillEntries();
+    } else {
+      while (ret.empty()) {
+        if (m_cv.wait_until(lock, *deadline) == std::cv_status::timeout) {
+          std::cout << "Dealine of " << *timeout_ms << " ms reached"
+                    << std::endl;
+          timed_out = true;
+          break;
+        }
+        fillEntries();
+      }
     }
   }
 
