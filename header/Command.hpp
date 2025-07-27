@@ -27,7 +27,8 @@ public:
     XREAD,
     INCR,
     MULTI,
-    EXEC
+    EXEC,
+    DISCARD
   };
 
   std::vector<std::unique_ptr<RespType>>
@@ -324,6 +325,23 @@ public:
 
 private:
   static CommandRegistrar<ExecCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              Connection &connection) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 0;
+  }
+};
+
+class DiscardCommand : public Command {
+public:
+  DiscardCommand() : Command(DISCARD) {}
+
+private:
+  static CommandRegistrar<DiscardCommand> registrar;
 
   virtual std::vector<std::unique_ptr<RespType>>
   executeImpl(const std::vector<std::unique_ptr<RespType>> &args,

@@ -45,6 +45,11 @@ public:
 
   std::unique_ptr<RespType> executeTransaction();
 
+  void discardTransaction() {
+    m_queued_commands.clear();
+    m_in_transaction = false;
+  }
+
   bool isInTransaction() { return m_in_transaction == true; }
 
 private:

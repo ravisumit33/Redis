@@ -21,7 +21,7 @@ bool Command::isWriteCommand() const {
 }
 
 bool Command::isControlCommand() const {
-  static const std::unordered_set<Type> control_commands = {EXEC};
+  static const std::unordered_set<Type> control_commands = {EXEC, DISCARD};
   return control_commands.contains(getType());
 }
 
@@ -440,5 +440,21 @@ ExecCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
     return result;
   }
   result.push_back(client_connection.executeTransaction());
+  return result;
+}
+
+CommandRegistrar<DiscardCommand> DiscardCommand::registrar("DISCARD");
+
+std::vector<std::unique_ptr<RespType>>
+DiscardCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                         Connection &connection) {
+  std::vector<std::unique_ptr<RespType>> result;
+  auto &client_connection = static_cast<ClientConnection &>(connection);
+  if (!client_connection.isInTransaction()) {
+    result.push_back(std::make_unique<RespError>("DISCARD without MULTI"));
+    return result;
+  }
+  client_connection.discardTransaction();
+  result.push_back(std::make_unique<RespString>("OK"));
   return result;
 }
