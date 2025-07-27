@@ -61,6 +61,8 @@ void ClientConnection::handleConnection() {
 
           if (isInTransaction() && !command->isControlCommand()) {
             queueCommand(command, std::move(args));
+            auto resp = std::make_unique<RespString>("QUEUED");
+            writeToSocket(getSocketFd(), resp->serialize());
           } else {
 
             if (getConfig().isMaster()) {
