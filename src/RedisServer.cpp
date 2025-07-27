@@ -1,6 +1,7 @@
 #include "RedisServer.hpp"
 #include "AppConfig.hpp"
 #include "Connection.hpp"
+#include "utils.hpp"
 #include <arpa/inet.h>
 #include <cassert>
 #include <cerrno>
@@ -140,12 +141,11 @@ void RedisServer::acceptConnections() {
 
     try {
 
-      // TODO: Check if it is required
-      // if (!m_init_done) {
-      //   auto respErr = RespError("Server still loading...");
-      //   writeToSocket(client_fd, respErr.serialize());
-      //   continue;
-      // }
+      if (!m_init_done) {
+        auto respErr = RespError("Server still loading...");
+        writeToSocket(client_fd, respErr.serialize());
+        continue;
+      }
 
       auto self = shared_from_this();
       std::thread client_thread([self, client_fd]() {

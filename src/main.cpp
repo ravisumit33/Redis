@@ -17,6 +17,8 @@ int main(int argc, char **argv) {
   ArgParser parser("Redis Server");
   parser.addOption("port", "Server port", "6379");
   parser.addOption("replicaof", "Master server descripton if replica");
+  parser.addOption("dir", "Path to directory contain redis files");
+  parser.addOption("dbfilename", "RDB file name");
 
   try {
     parser.parse(argc, argv);
@@ -27,9 +29,13 @@ int main(int argc, char **argv) {
   }
 
   std::optional<SlaveConfig> slave_config = std::nullopt;
+  std::optional<MasterConfig> master_config = std::nullopt;
   auto replicaof = parser.get<std::string>("replicaof");
   if (replicaof.empty()) {
     ReplicationManager::getInstance().initAsMaster();
+    auto redis_dir = parser.get<std::string>("dir");
+    auto db_filename = parser.get<std::string>("dbfilename");
+    master_config = {.dir = redis_dir, .dbfilename = db_filename};
   } else {
     std::string master_host;
     unsigned master_port;
@@ -41,7 +47,7 @@ int main(int argc, char **argv) {
 
   AppConfig config(
       static_cast<unsigned>(std::stoul(parser.get<std::string>("port"))),
-      slave_config);
+      master_config, slave_config);
 
   try {
     auto server = std::make_shared<RedisServer>(config);
@@ -50,7 +56,7 @@ int main(int argc, char **argv) {
     std::cerr << "FATAL: Server startup failed: " << e.what() << std::endl;
     return 1;
   }
-  
+
   std::cout << "Redis server shutting down..." << std::endl;
 
   return 0;
