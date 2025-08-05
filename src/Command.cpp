@@ -447,7 +447,7 @@ CommandRegistrar<DiscardCommand> DiscardCommand::registrar("DISCARD");
 
 std::vector<std::unique_ptr<RespType>>
 DiscardCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
+                            Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
   auto &client_connection = static_cast<ClientConnection &>(connection);
   if (!client_connection.isInTransaction()) {
@@ -463,7 +463,7 @@ CommandRegistrar<ConfigCommand> ConfigCommand::registrar("CONFIG");
 
 std::vector<std::unique_ptr<RespType>>
 ConfigCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
+                           Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
   auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
   if (arg1 != "GET") {
@@ -474,7 +474,8 @@ ConfigCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   auto &config = connection.getConfig();
   auto &master_config = config.getMasterConfig();
   if (!master_config) {
-    result.push_back(std::make_unique<RespError>("Command not supported in non-master mode"));
+    result.push_back(std::make_unique<RespError>(
+        "Command not supported in non-master mode"));
     return result;
   }
   if (arg2 != "dir") {
@@ -482,7 +483,28 @@ ConfigCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
     return result;
   }
   auto resp_array = std::make_unique<RespArray>();
-  resp_array->add(std::make_unique<RespBulkString>(arg2))->add(std::make_unique<RespBulkString>(master_config->dir));
+  resp_array->add(std::make_unique<RespBulkString>(arg2))
+      ->add(std::make_unique<RespBulkString>(master_config->dir));
+  result.push_back(std::move(resp_array));
+  return result;
+}
+
+CommandRegistrar<KeysCommand> KeysCommand::registrar("KEYS");
+
+std::vector<std::unique_ptr<RespType>>
+KeysCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                         Connection &connection) {
+  std::vector<std::unique_ptr<RespType>> result;
+  auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  if (arg1 != "*") {
+    result.push_back(std::make_unique<RespError>("Invalid argument: " + arg1));
+    return result;
+  }
+  auto store_keys = RedisStore::instance().getKeys();
+  auto resp_array = std::make_unique<RespArray>();
+  for (const auto &store_key : store_keys) {
+    resp_array->add(std::make_unique<RespBulkString>(store_key));
+  }
   result.push_back(std::move(resp_array));
   return result;
 }

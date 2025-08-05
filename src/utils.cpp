@@ -118,7 +118,6 @@ parseCommand(std::istream &in) {
 }
 
 std::array<uint64_t, 2> parseStreamEntryId(const std::string &s) {
-
   std::size_t hyphen_pos = s.find("-");
   uint64_t timestamp = std::stoull(s.substr(0, hyphen_pos));
   uint64_t sequence = 0;

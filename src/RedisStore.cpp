@@ -1,9 +1,11 @@
 #include "RedisStore.hpp"
 #include "utils.hpp"
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -270,4 +272,11 @@ RedisStore::getStreamEntriesAfterAny(
   }
 
   return {timed_out, ret};
+}
+
+std::vector<std::string> RedisStore::getKeys() const {
+  std::vector<std::string> keys;
+  std::transform(mStore.begin(), mStore.end(), std::back_inserter(keys),
+                 [](const auto &pair) { return pair.first; });
+  return keys;
 }

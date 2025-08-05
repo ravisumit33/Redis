@@ -29,7 +29,8 @@ public:
     MULTI,
     EXEC,
     DISCARD,
-    CONFIG
+    CONFIG,
+    KEYS
   };
 
   std::vector<std::unique_ptr<RespType>>
@@ -368,5 +369,22 @@ private:
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
     return args.size() == 2;
+  }
+};
+
+class KeysCommand : public Command {
+public:
+  KeysCommand() : Command(KEYS) {}
+
+private:
+  static CommandRegistrar<KeysCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              Connection &connection) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 1;
   }
 };

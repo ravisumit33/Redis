@@ -1,14 +1,18 @@
 #include "RedisServer.hpp"
 #include "AppConfig.hpp"
 #include "Connection.hpp"
+#include "RdbParser.hpp"
 #include "utils.hpp"
 #include <arpa/inet.h>
 #include <cassert>
 #include <cerrno>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <ostream>
 #include <stdexcept>
+#include <string>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
@@ -59,6 +63,30 @@ void RedisServer::start() {
     });
     master_thread.detach();
   } else {
+    auto &mmetadata = m_config.getMasterConfig();
+    auto rdb_path =
+        std::filesystem::path(mmetadata->dir) / mmetadata->dbfilename;
+    std::ifstream rdb_fstream(rdb_path);
+    if (rdb_fstream) {
+      RdbHeaderParser rdb_header_parser;
+      rdb_header_parser.parse(rdb_fstream);
+      while (rdb_fstream.peek() != std::char_traits<char>::eof()) {
+        char opc = rdb_fstream.get();
+        if (!rdb_fstream) {
+          throw std::runtime_error("Failure reading rdb file");
+        }
+        RdbOpcode rdb_opcode =
+            static_cast<RdbOpcode>(static_cast<uint8_t>(opc));
+        auto parser = RdbParserRegistry::instance().get(rdb_opcode);
+        if (!parser) {
+          throw std::runtime_error(
+              "Invalid opcode: " +
+              std::to_string(static_cast<uint8_t>(rdb_opcode)) +
+              " found during RDB parsing");
+        }
+        parser->parse(rdb_fstream);
+      }
+    }
     m_init_done = true;
   }
 

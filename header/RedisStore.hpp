@@ -135,6 +135,8 @@ public:
     return instance;
   }
 
+  std::vector<std::string> getKeys() const;
+
 private:
   RedisStore() = default;
   std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>> mStore;
