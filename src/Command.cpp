@@ -55,7 +55,7 @@ SetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   size_t nargs = args.size();
   auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
   auto value = static_cast<RespBulkString &>(*args.at(1)).getValue();
-  std::optional<std::chrono::milliseconds> expiry = std::nullopt;
+  std::optional<std::chrono::system_clock::time_point> expiry = std::nullopt;
   if (nargs == 4) {
     auto expiryArgName = static_cast<RespBulkString &>(*args.at(2)).getValue();
     if (expiryArgName != "px") {
@@ -66,7 +66,8 @@ SetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
       auto expiry_time_str =
           static_cast<RespBulkString &>(*args.at(3)).getValue();
       auto expiryDelta = std::stoul(expiry_time_str);
-      expiry = std::chrono::milliseconds(expiryDelta);
+      expiry = std::chrono::system_clock::now() +
+               std::chrono::milliseconds(expiryDelta);
     } catch (const std::exception &ex) {
       auto expiry_time_str =
           static_cast<RespBulkString &>(*args.at(3)).getValue();

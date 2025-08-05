@@ -24,14 +24,11 @@ StreamValue::StreamEntryId StreamValue::getTopEntry() const {
   return it->first;
 }
 
-void RedisStore::setString(const std::string &key, const std::string &value,
-                           std::optional<std::chrono::milliseconds> exp) {
+void RedisStore::setString(
+    const std::string &key, const std::string &value,
+    std::optional<std::chrono::system_clock::time_point> exp) {
   std::lock_guard<std::shared_mutex> lock(mMutex);
-  std::optional<std::chrono::steady_clock::time_point> expiry = std::nullopt;
-  if (exp) {
-    expiry = std::chrono::steady_clock::now() + exp.value();
-  }
-  auto val = std::make_unique<StringValue>(value, expiry);
+  auto val = std::make_unique<StringValue>(value, exp);
   mStore.insert_or_assign(key, std::move(val));
   m_cv.notify_all();
 }
@@ -192,9 +189,9 @@ RedisStore::getStreamEntriesAfterAny(
     const std::vector<std::string> &entry_ids_start,
     std::optional<uint64_t> timeout_ms) const {
 
-  std::optional<std::chrono::steady_clock::time_point> deadline;
+  std::optional<std::chrono::system_clock::time_point> deadline;
   if (timeout_ms) {
-    deadline = std::chrono::steady_clock::now() +
+    deadline = std::chrono::system_clock::now() +
                std::chrono::milliseconds(*timeout_ms);
   }
 

@@ -97,15 +97,15 @@ class RdbValueParser : public RdbPayloadParser {
 public:
   virtual void parseKeyValue(
       std::istream &is,
-      std::optional<std::chrono::milliseconds> expiry = std::nullopt) = 0;
+      std::optional<std::chrono::system_clock::time_point> expiry) = 0;
 };
 
 class RdbStringValueParser : public RdbValueParser {
 public:
   virtual void parse(std::istream &is) override;
-  void parseKeyValue(
-      std::istream &is,
-      std::optional<std::chrono::milliseconds> expiry = std::nullopt) override;
+  void parseKeyValue(std::istream &is,
+                     std::optional<std::chrono::system_clock::time_point>
+                         expiry = std::nullopt) override;
 
 private:
   static RdbParserRegistrar<RdbStringValueParser> registrar;

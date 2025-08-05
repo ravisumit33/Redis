@@ -57,7 +57,7 @@ unsigned MasterState::waitForSlaves(unsigned expected_slaves_count,
                                     uint64_t timeout_ms) {
   std::unique_lock<std::mutex> lock(m_mutex);
   auto deadline =
-      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+      std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
 
   auto count_done_slaves = [this] -> unsigned {
     unsigned count = 0;

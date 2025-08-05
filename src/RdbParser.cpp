@@ -130,13 +130,17 @@ RdbParserRegistrar<RdbStringValueParser>
     RdbStringValueParser::registrar(RdbOpcode::STRING_VALUE);
 
 void RdbStringValueParser::parseKeyValue(
-    std::istream &is, std::optional<std::chrono::milliseconds> expiry) {
+    std::istream &is,
+    std::optional<std::chrono::system_clock::time_point> expiry) {
   std::string key = readString(is);
   std::string value = readString(is);
   RedisStore::instance().setString(key, value, expiry);
   std::cout << "Store key: " << key << ", value: " << value;
   if (expiry) {
-    std::cout << ", expiry after: " << *expiry << " ms";
+    std::cout << ", expiry after: "
+              << duration_cast<std::chrono::milliseconds>(
+                     (*expiry).time_since_epoch())
+                     .count();
   }
   std::cout << std::endl;
 }
@@ -160,15 +164,16 @@ void RdbKeyValueExpMsParser::parse(std::istream &is) {
     throw std::logic_error("Unexpected: parser not found");
   }
   auto value_parser = static_cast<RdbValueParser *>(parser);
-  value_parser->parseKeyValue(is, expiry);
+  value_parser->parseKeyValue(is,
+                              std::chrono::system_clock::time_point{expiry});
 }
 
 RdbParserRegistrar<RdbKeyValueExpSParser>
     RdbKeyValueExpSParser::registrar(RdbOpcode::VALUE_EXPIRETIME);
 
 void RdbKeyValueExpSParser::parse(std::istream &is) {
-  auto expiry = std::chrono::milliseconds(
-      bytesToUInt(readBytes<8>(is, std::endian::little)) * 1000);
+  auto expiry =
+      std::chrono::seconds(bytesToUInt(readBytes<8>(is, std::endian::little)));
   auto [rdb_opcode] = readBytes<1>(is);
   if (!isValue(static_cast<RdbOpcode>(rdb_opcode))) {
     throw std::runtime_error("Invalid opcode: " + std::to_string(rdb_opcode) +
@@ -180,5 +185,6 @@ void RdbKeyValueExpSParser::parse(std::istream &is) {
     throw std::logic_error("Unexpected: parser not found");
   }
   auto value_parser = static_cast<RdbValueParser *>(parser);
-  value_parser->parseKeyValue(is, expiry);
+  value_parser->parseKeyValue(is,
+                              std::chrono::system_clock::time_point{expiry});
 }

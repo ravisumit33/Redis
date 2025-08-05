@@ -21,14 +21,14 @@ public:
 
   RedisStoreValue(
       Type t,
-      std::optional<std::chrono::steady_clock::time_point> exp = std::nullopt)
+      std::optional<std::chrono::system_clock::time_point> exp = std::nullopt)
       : m_type(t), mExpiry(exp) {}
 
   bool hasExpired() const {
     if (!mExpiry) {
       return false;
     }
-    return std::chrono::steady_clock::now() >= mExpiry.value();
+    return std::chrono::system_clock::now() >= mExpiry.value();
   }
 
   virtual std::unique_ptr<RedisStoreValue> clone() const = 0;
@@ -47,13 +47,13 @@ public:
 
 private:
   Type m_type;
-  std::optional<std::chrono::steady_clock::time_point> mExpiry;
+  std::optional<std::chrono::system_clock::time_point> mExpiry;
 };
 
 class StringValue : public RedisStoreValue {
 public:
   StringValue(const std::string &val,
-              std::optional<std::chrono::steady_clock::time_point> exp)
+              std::optional<std::chrono::system_clock::time_point> exp)
       : RedisStoreValue(STRING, exp), mValue(val) {}
 
   std::string getValue() const { return mValue; }
@@ -104,8 +104,9 @@ private:
 
 class RedisStore {
 public:
-  void setString(const std::string &key, const std::string &value,
-                 std::optional<std::chrono::milliseconds> exp = std::nullopt);
+  void setString(
+      const std::string &key, const std::string &value,
+      std::optional<std::chrono::system_clock::time_point> exp = std::nullopt);
 
   StreamValue::StreamEntryId addStreamEntry(const std::string &key,
                                             const std::string &entry_id,
