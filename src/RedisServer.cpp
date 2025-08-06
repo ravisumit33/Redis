@@ -2,7 +2,6 @@
 #include "AppConfig.hpp"
 #include "Connection.hpp"
 #include "RdbParser.hpp"
-#include "utils.hpp"
 #include <arpa/inet.h>
 #include <cassert>
 #include <cerrno>

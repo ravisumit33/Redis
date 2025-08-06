@@ -36,6 +36,7 @@ std::vector<std::string> ListValue::getElementsInRange(int start_idx,
   if (end_idx < 0) {
     end_idx += num_elements;
   }
+  start_idx = std::max(start_idx, 0);
   end_idx = std::min<int>(end_idx, num_elements - 1);
   if (start_idx > end_idx) {
     return {};
