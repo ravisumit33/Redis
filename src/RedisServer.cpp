@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <cassert>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -169,10 +170,8 @@ void RedisServer::acceptConnections() {
 
     try {
 
-      if (!m_init_done) {
-        auto respErr = RespError("Server still loading...");
-        writeToSocket(client_fd, respErr.serialize());
-        continue;
+      while (!m_init_done) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
 
       auto self = shared_from_this();
