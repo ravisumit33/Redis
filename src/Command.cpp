@@ -5,6 +5,7 @@
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "utils.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -505,6 +506,114 @@ KeysCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   auto resp_array = std::make_unique<RespArray>();
   for (const auto &store_key : store_keys) {
     resp_array->add(std::make_unique<RespBulkString>(store_key));
+  }
+  result.push_back(std::move(resp_array));
+  return result;
+}
+
+CommandRegistrar<RpushCommand> RpushCommand::registrar("RPUSH");
+
+std::vector<std::unique_ptr<RespType>>
+RpushCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                          Connection &connection) {
+  std::vector<std::unique_ptr<RespType>> result;
+  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  std::vector<std::string> elements;
+  std::transform(args.begin() + 1, args.end(), std::back_inserter(elements),
+                 [](const auto &arg) {
+                   return static_cast<RespBulkString &>(*arg).getValue();
+                 });
+  auto list_size =
+      RedisStore::instance().addListElementsAtEnd(store_key, elements);
+  result.push_back(std::make_unique<RespInt>(list_size));
+  return result;
+}
+
+CommandRegistrar<LpushCommand> LpushCommand::registrar("LPUSH");
+
+std::vector<std::unique_ptr<RespType>>
+LpushCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                          Connection &connection) {
+  std::vector<std::unique_ptr<RespType>> result;
+  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  std::vector<std::string> elements;
+  std::transform(args.begin() + 1, args.end(), std::back_inserter(elements),
+                 [](const auto &arg) {
+                   return static_cast<RespBulkString &>(*arg).getValue();
+                 });
+  auto list_size =
+      RedisStore::instance().addListElementsAtBegin(store_key, elements);
+  result.push_back(std::make_unique<RespInt>(list_size));
+  return result;
+}
+
+CommandRegistrar<LlenCommand> LlenCommand::registrar("LLEN");
+
+std::vector<std::unique_ptr<RespType>>
+LlenCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                         Connection &connection) {
+  std::vector<std::unique_ptr<RespType>> result;
+  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  auto val = RedisStore::instance().get(store_key);
+  if (!val) {
+    result.push_back(std::make_unique<RespInt>(0));
+    return result;
+  }
+  auto list_val = static_cast<ListValue &>(*(val.value()));
+  result.push_back(std::make_unique<RespInt>(list_val.size()));
+  return result;
+}
+
+CommandRegistrar<LpopCommand> LpopCommand::registrar("LPOP");
+
+std::vector<std::unique_ptr<RespType>>
+LpopCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                         Connection &connection) {
+  std::vector<std::unique_ptr<RespType>> result;
+  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  unsigned el_count = 1;
+  if (args.size() == 2) {
+    el_count =
+        std::stoul(static_cast<RespBulkString &>(*args.at(1)).getValue());
+  }
+  auto popped_elements =
+      RedisStore::instance().removeListElementsAtBegin(store_key, el_count);
+  if (popped_elements.empty()) {
+    result.push_back(std::make_unique<RespBulkString>());
+    return result;
+  }
+  if (el_count == 1) {
+    result.push_back(std::make_unique<RespBulkString>(popped_elements.at(0)));
+    return result;
+  }
+
+  auto resp_array = std::make_unique<RespArray>();
+  for (const auto &el : popped_elements) {
+    resp_array->add(std::make_unique<RespBulkString>(el));
+  }
+  result.push_back(std::move(resp_array));
+  return result;
+}
+
+CommandRegistrar<LrangeCommand> LrangeCommand::registrar("LRANGE");
+
+std::vector<std::unique_ptr<RespType>>
+LrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                           Connection &connection) {
+  std::vector<std::unique_ptr<RespType>> result;
+  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  int start_idx =
+      std::stoi(static_cast<RespBulkString &>(*args.at(1)).getValue());
+  int end_idx =
+      std::stoi(static_cast<RespBulkString &>(*args.at(2)).getValue());
+  auto val = RedisStore::instance().get(store_key);
+  auto resp_array = std::make_unique<RespArray>();
+  if (val) {
+    auto list_val = static_cast<ListValue &>(*(val.value()));
+    auto list_elements = list_val.getElementsInRange(start_idx, end_idx);
+    for (const auto &list_el : list_elements) {
+      resp_array->add(std::make_unique<RespBulkString>(list_el));
+    }
   }
   result.push_back(std::move(resp_array));
   return result;

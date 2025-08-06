@@ -24,6 +24,28 @@ StreamValue::StreamEntryId StreamValue::getTopEntry() const {
   return it->first;
 }
 
+std::vector<std::string> ListValue::getElementsInRange(int start_idx,
+                                                       int end_idx) {
+  if (empty()) {
+    return {};
+  }
+  std::size_t num_elements = mElements.size();
+  if (start_idx < 0) {
+    start_idx += num_elements;
+  }
+  if (end_idx < 0) {
+    end_idx += num_elements;
+  }
+  end_idx = std::min<int>(end_idx, num_elements - 1);
+  if (start_idx > end_idx) {
+    return {};
+  }
+
+  std::vector<std::string> elements(mElements.begin() + start_idx,
+                                    mElements.begin() + end_idx + 1);
+  return elements;
+}
+
 void RedisStore::setString(
     const std::string &key, const std::string &value,
     std::optional<std::chrono::system_clock::time_point> exp) {
@@ -31,6 +53,64 @@ void RedisStore::setString(
   auto val = std::make_unique<StringValue>(value, exp);
   mStore.insert_or_assign(key, std::move(val));
   m_cv.notify_all();
+}
+
+std::size_t
+RedisStore::addListElementsAtEnd(const std::string &key,
+                                 const std::vector<std::string> &elements) {
+  std::lock_guard<std::shared_mutex> lock(mMutex);
+  auto it = mStore.find(key);
+
+  std::size_t ret = elements.size();
+  if (it == mStore.end()) {
+    auto val = std::make_unique<ListValue>(elements);
+    mStore.insert_or_assign(key, std::move(val));
+  } else {
+    auto &list = static_cast<ListValue &>(*it->second);
+    ret += list.size();
+    list.insertAtEnd(elements);
+  }
+  m_cv.notify_all();
+  return ret;
+}
+
+std::size_t
+RedisStore::addListElementsAtBegin(const std::string &key,
+                                   const std::vector<std::string> &elements) {
+  std::lock_guard<std::shared_mutex> lock(mMutex);
+  auto it = mStore.find(key);
+
+  std::size_t ret = elements.size();
+  if (it == mStore.end()) {
+    auto val = std::make_unique<ListValue>(elements);
+    mStore.insert_or_assign(key, std::move(val));
+  } else {
+    auto &list = static_cast<ListValue &>(*it->second);
+    ret += list.size();
+    list.insertAtBegin(elements);
+  }
+  m_cv.notify_all();
+  return ret;
+}
+
+std::vector<std::string>
+RedisStore::removeListElementsAtBegin(const std::string &key,
+                                      unsigned int count) {
+  std::lock_guard<std::shared_mutex> lock(mMutex);
+  auto it = mStore.find(key);
+  if (it == mStore.end()) {
+    return {};
+  }
+  auto &list = static_cast<ListValue &>(*it->second);
+  if (list.empty()) {
+    return {};
+  }
+
+  std::vector<std::string> popped_elements;
+  while (!list.empty() && count--) {
+    popped_elements.push_back(list.pop_front());
+  }
+  return popped_elements;
 }
 
 StreamValue::StreamEntryId

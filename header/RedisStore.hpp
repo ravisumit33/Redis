@@ -3,6 +3,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <memory>
 #include <optional>
@@ -15,7 +16,7 @@
 
 class RedisStoreValue {
 public:
-  enum Type { STRING, STREAM };
+  enum Type { STRING, STREAM, LIST };
 
   virtual ~RedisStoreValue() = default;
 
@@ -102,11 +103,55 @@ private:
   std::map<StreamEntryId, StreamEntry> mStreams;
 };
 
+class ListValue : public RedisStoreValue {
+public:
+  ListValue(const std::vector<std::string> &elements)
+      : RedisStoreValue(LIST), mElements(elements.begin(), elements.end()) {}
+
+  ListValue &insertAtBegin(const std::vector<std::string> &v) {
+    mElements.insert(mElements.begin(), v.begin(), v.end());
+    return *this;
+  }
+
+  ListValue &insertAtEnd(const std::vector<std::string> &v) {
+    mElements.insert(mElements.end(), v.begin(), v.end());
+    return *this;
+  }
+
+  bool empty() const { return mElements.empty(); }
+
+  std::size_t size() const { return mElements.size(); }
+
+  std::string pop_front() {
+    auto front_el = mElements.front();
+    mElements.pop_front();
+    return front_el;
+  }
+
+  std::vector<std::string> getElementsInRange(int start_idx, int end_idx);
+
+  virtual std::unique_ptr<RedisStoreValue> clone() const override {
+    return std::make_unique<ListValue>(*this);
+  };
+
+private:
+  std::deque<std::string> mElements;
+};
+
 class RedisStore {
 public:
   void setString(
       const std::string &key, const std::string &value,
       std::optional<std::chrono::system_clock::time_point> exp = std::nullopt);
+
+  std::size_t addListElementsAtEnd(const std::string &key,
+                                   const std::vector<std::string> &elements);
+
+  std::size_t addListElementsAtBegin(const std::string &key,
+                                     const std::vector<std::string> &elements);
+
+  std::vector<std::string> removeListElementsAtBegin(const std::string &key,
+                                                     unsigned int count);
 
   StreamValue::StreamEntryId addStreamEntry(const std::string &key,
                                             const std::string &entry_id,

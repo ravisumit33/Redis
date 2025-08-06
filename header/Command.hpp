@@ -30,7 +30,12 @@ public:
     EXEC,
     DISCARD,
     CONFIG,
-    KEYS
+    KEYS,
+    RPUSH,
+    LPUSH,
+    LLEN,
+    LPOP,
+    LRANGE
   };
 
   std::vector<std::unique_ptr<RespType>>
@@ -386,5 +391,90 @@ private:
   virtual bool validateArgsImpl(
       const std::vector<std::unique_ptr<RespType>> &args) override {
     return args.size() == 1;
+  }
+};
+
+class RpushCommand : public Command {
+public:
+  RpushCommand() : Command(RPUSH) {}
+
+private:
+  static CommandRegistrar<RpushCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              Connection &connection) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() >= 2;
+  }
+};
+
+class LpushCommand : public Command {
+public:
+  LpushCommand() : Command(LPUSH) {}
+
+private:
+  static CommandRegistrar<LpushCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              Connection &connection) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() >= 2;
+  }
+};
+
+class LlenCommand : public Command {
+public:
+  LlenCommand() : Command(LLEN) {}
+
+private:
+  static CommandRegistrar<LlenCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              Connection &connection) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 1;
+  }
+};
+
+class LpopCommand : public Command {
+public:
+  LpopCommand() : Command(LPOP) {}
+
+private:
+  static CommandRegistrar<LpopCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              Connection &connection) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 1 || args.size() == 2;
+  }
+};
+
+class LrangeCommand : public Command {
+public:
+  LrangeCommand() : Command(LRANGE) {}
+
+private:
+  static CommandRegistrar<LrangeCommand> registrar;
+
+  virtual std::vector<std::unique_ptr<RespType>>
+  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+              Connection &connection) override;
+
+  virtual bool validateArgsImpl(
+      const std::vector<std::unique_ptr<RespType>> &args) override {
+    return args.size() == 3;
   }
 };
