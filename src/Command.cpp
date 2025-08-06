@@ -541,6 +541,7 @@ LpushCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                  [](const auto &arg) {
                    return static_cast<RespBulkString &>(*arg).getValue();
                  });
+  std::reverse(elements.begin(), elements.end());
   auto list_size =
       RedisStore::instance().addListElementsAtBegin(store_key, elements);
   result.push_back(std::make_unique<RespInt>(list_size));
