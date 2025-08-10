@@ -5,7 +5,7 @@
 #include "RespType.hpp"
 #include "RespTypeParser.hpp"
 #include "unistd.h"
-#include "utils.hpp"
+#include "utils/genericUtils.hpp"
 #include <cstddef>
 #include <exception>
 #include <functional>

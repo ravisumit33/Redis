@@ -1,0 +1,50 @@
+#pragma once
+
+#include <chrono>
+#include <condition_variable>
+#include <list>
+#include <memory>
+#include <mutex>
+
+class FifoBlockingQueue {
+public:
+  class WaitToken {
+  public:
+    WaitToken(FifoBlockingQueue &queue);
+    ~WaitToken();
+
+    template <typename Rep, typename Period>
+    bool wait_for(const std::chrono::duration<Rep, Period> &timeout) {
+      std::unique_lock<std::mutex> lock(m_mutex);
+      return m_cv.wait_for(lock, timeout) == std::cv_status::no_timeout;
+    }
+
+    void wait() {
+      std::unique_lock<std::mutex> lock(m_mutex);
+      m_cv.wait(lock);
+    }
+
+    void notify() { m_cv.notify_one(); }
+
+  private:
+    FifoBlockingQueue *m_queue;
+    std::mutex m_mutex;
+    std::condition_variable m_cv;
+  };
+
+  std::unique_ptr<WaitToken> create_wait_token();
+
+  void notify_one();
+
+  void notify_all();
+
+  std::size_t waiting_count() const;
+
+private:
+  mutable std::mutex m_queue_mutex;
+  std::list<WaitToken *> m_waiting_list;
+
+  void remove_wait_token(WaitToken *token);
+
+  friend class WaitToken;
+};

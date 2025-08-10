@@ -1,7 +1,7 @@
 #pragma once
 
+#include "utils/FifoBlockingQueue.hpp"
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <map>
@@ -106,25 +106,25 @@ private:
 class ListValue : public RedisStoreValue {
 public:
   ListValue(const std::vector<std::string> &elements)
-      : RedisStoreValue(LIST), mElements(elements.begin(), elements.end()) {}
+      : RedisStoreValue(LIST), m_elements(elements.begin(), elements.end()) {}
 
   ListValue &insertAtBegin(const std::vector<std::string> &v) {
-    mElements.insert(mElements.begin(), v.begin(), v.end());
+    m_elements.insert(m_elements.begin(), v.begin(), v.end());
     return *this;
   }
 
   ListValue &insertAtEnd(const std::vector<std::string> &v) {
-    mElements.insert(mElements.end(), v.begin(), v.end());
+    m_elements.insert(m_elements.end(), v.begin(), v.end());
     return *this;
   }
 
-  bool empty() const { return mElements.empty(); }
+  bool empty() const { return m_elements.empty(); }
 
-  std::size_t size() const { return mElements.size(); }
+  std::size_t size() const { return m_elements.size(); }
 
   std::string pop_front() {
-    auto front_el = mElements.front();
-    mElements.pop_front();
+    std::string front_el = m_elements.front();
+    m_elements.pop_front();
     return front_el;
   }
 
@@ -135,7 +135,7 @@ public:
   };
 
 private:
-  std::deque<std::string> mElements;
+  std::deque<std::string> m_elements;
 };
 
 class RedisStore {
@@ -150,8 +150,9 @@ public:
   std::size_t addListElementsAtBegin(const std::string &key,
                                      const std::vector<std::string> &elements);
 
-  std::vector<std::string> removeListElementsAtBegin(const std::string &key,
-                                                     unsigned int count);
+  std::pair<bool, std::vector<std::string>>
+  removeListElementsAtBegin(const std::string &key, unsigned int count,
+                            std::optional<double> timeout_s = std::nullopt);
 
   StreamValue::StreamEntryId addStreamEntry(const std::string &key,
                                             const std::string &entry_id,
@@ -185,7 +186,60 @@ public:
 
 private:
   RedisStore() = default;
-  std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>> mStore;
-  mutable std::shared_mutex mMutex;
-  mutable std::condition_variable_any m_cv;
+  std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>> m_store;
+  mutable std::shared_mutex m_mutex;
+  mutable std::unordered_map<std::string, FifoBlockingQueue> m_blocking_queues;
+  mutable std::mutex m_blocking_queues_mutex;
+
+  void notifyBlockingClients(const std::string& key) const;
+
+  class StoreReadGuard {
+  public:
+    explicit StoreReadGuard(const RedisStore& store) 
+        : m_store(store.m_store), m_lock(store.m_mutex) {}
+    
+    const auto& operator*() const { return m_store; }
+    const auto* operator->() const { return &m_store; }
+    
+  private:
+    const std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>>& m_store;
+    std::shared_lock<std::shared_mutex> m_lock;
+  };
+
+  class StoreWriteGuard {
+  public:
+    explicit StoreWriteGuard(const RedisStore& store) 
+        : m_store(const_cast<std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>>&>(store.m_store)), 
+          m_lock(store.m_mutex) {}
+    
+    auto& operator*() { return m_store; }
+    auto* operator->() { return &m_store; }
+    
+  private:
+    std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>>& m_store;
+    std::unique_lock<std::shared_mutex> m_lock;
+  };
+
+  class BlockingQueuesGuard {
+  public:
+    explicit BlockingQueuesGuard(const RedisStore& store) 
+        : m_queues(const_cast<std::unordered_map<std::string, FifoBlockingQueue>&>(store.m_blocking_queues)), 
+          m_lock(store.m_blocking_queues_mutex) {}
+    
+    auto& operator*() { return m_queues; }
+    auto* operator->() { return &m_queues; }
+    
+    FifoBlockingQueue& getQueue(const std::string& key) { return m_queues[key]; }
+    
+  private:
+    std::unordered_map<std::string, FifoBlockingQueue>& m_queues;
+    std::unique_lock<std::mutex> m_lock;
+  };
+
+public:
+  StoreReadGuard readStore() const { return StoreReadGuard(*this); }
+  StoreWriteGuard writeStore() const { return StoreWriteGuard(*this); }
+  BlockingQueuesGuard blockingQueues() const { return BlockingQueuesGuard(*this); }
 };
+
+

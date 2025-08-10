@@ -1,6 +1,6 @@
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
-#include "utils.hpp"
+#include "utils/genericUtils.hpp"
 #include <cctype>
 #include <chrono>
 #include <condition_variable>

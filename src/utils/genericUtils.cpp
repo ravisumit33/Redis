@@ -1,4 +1,4 @@
-#include "utils.hpp"
+#include "utils/genericUtils.hpp"
 #include "Command.hpp"
 #include "RespTypeParser.hpp"
 #include <array>

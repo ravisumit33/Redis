@@ -4,7 +4,7 @@
 #include "RedisStore.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
-#include "utils.hpp"
+#include "utils/genericUtils.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -332,13 +332,13 @@ XreadCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
     timeout_ms = std::stoull(
         static_cast<RespBulkString &>(*args.at(arg_idx)).getValue());
     ++arg_idx;
-    auto second_arg =
+    auto third_arg =
         static_cast<RespBulkString &>(*args.at(arg_idx)).getValue();
     ++arg_idx;
 
-    if (second_arg != "streams") {
+    if (third_arg != "streams") {
       result.push_back(std::make_unique<RespError>(
-          "Unsupported read_type arg: " + second_arg));
+          "Unsupported read_type arg: " + third_arg));
       return result;
     }
   } else if (first_arg != "streams") {
@@ -577,7 +577,7 @@ LpopCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
     el_count =
         std::stoul(static_cast<RespBulkString &>(*args.at(1)).getValue());
   }
-  auto popped_elements =
+  auto [_, popped_elements] =
       RedisStore::instance().removeListElementsAtBegin(store_key, el_count);
   if (popped_elements.empty()) {
     result.push_back(std::make_unique<RespBulkString>());
@@ -616,6 +616,31 @@ LrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
       resp_array->add(std::make_unique<RespBulkString>(list_el));
     }
   }
+  result.push_back(std::move(resp_array));
+  return result;
+}
+
+CommandRegistrar<BlpopCommand> BlpopCommand::registrar("BLPOP");
+
+std::vector<std::unique_ptr<RespType>>
+BlpopCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+                          Connection &connection) {
+  std::vector<std::unique_ptr<RespType>> result;
+  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  auto timeout_s =
+      std::stod(static_cast<RespBulkString &>(*args.at(1)).getValue());
+  std::cout << "Store key: " << store_key << ", Timeout: " << timeout_s
+            << std::endl;
+  auto [timed_out, popped_elements] =
+      RedisStore::instance().removeListElementsAtBegin(store_key, 1, timeout_s);
+  if (timed_out) {
+    result.push_back(std::make_unique<RespBulkString>());
+    return result;
+  }
+  auto resp_array = std::make_unique<RespArray>();
+  resp_array->add(std::make_unique<RespBulkString>(store_key))
+      ->add(std::make_unique<RespBulkString>(popped_elements.at(0)));
+
   result.push_back(std::move(resp_array));
   return result;
 }
