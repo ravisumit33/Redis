@@ -1,5 +1,4 @@
 #include "utils/genericUtils.hpp"
-#include "Command.hpp"
 #include "RespTypeParser.hpp"
 #include <array>
 #include <iomanip>
