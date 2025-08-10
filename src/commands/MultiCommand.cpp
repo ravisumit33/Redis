@@ -1,5 +1,5 @@
 #include "commands/MultiCommand.hpp"
-#include "Connection.hpp"
+#include "connections/ClientConnection.hpp"
 #include "RespType.hpp"
 
 CommandRegistrar<MultiCommand> MultiCommand::registrar("MULTI");

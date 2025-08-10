@@ -1,5 +1,5 @@
 #include "commands/ExecCommand.hpp"
-#include "Connection.hpp"
+#include "connections/ClientConnection.hpp"
 #include "RespType.hpp"
 
 CommandRegistrar<ExecCommand> ExecCommand::registrar("EXEC");

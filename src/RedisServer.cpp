@@ -1,6 +1,7 @@
 #include "RedisServer.hpp"
 #include "AppConfig.hpp"
-#include "Connection.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 #include "RdbParser.hpp"
 #include <arpa/inet.h>
 #include <cassert>

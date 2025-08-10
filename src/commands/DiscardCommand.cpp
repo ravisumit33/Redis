@@ -1,5 +1,5 @@
 #include "commands/DiscardCommand.hpp"
-#include "Connection.hpp"
+#include "connections/ClientConnection.hpp"
 #include "RespType.hpp"
 
 CommandRegistrar<DiscardCommand> DiscardCommand::registrar("DISCARD");

@@ -13,6 +13,7 @@ file(GLOB_RECURSE SOURCE_FILES
   ${CMAKE_SOURCE_DIR}/src/utils/*.cpp
   ${CMAKE_SOURCE_DIR}/src/ReplicationState.cpp
   ${CMAKE_SOURCE_DIR}/src/commands/*.cpp
+  ${CMAKE_SOURCE_DIR}/src/connections/*.cpp
 )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
