@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Command.hpp"
-#include "Registrar.hpp"
 
 class TypeCommand : public Command {
 public:

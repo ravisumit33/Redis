@@ -42,7 +42,8 @@ SetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   }
 
   RedisStore::instance().setString(key, value, expiry);
-
+  std::cout << "Key: " << key << " set in store with value: " << value
+            << std::endl;
   result.push_back(std::make_unique<RespString>("OK"));
   return result;
 }
