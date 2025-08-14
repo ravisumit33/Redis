@@ -3,6 +3,8 @@
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "utils/genericUtils.hpp"
+#include <algorithm>
+#include <cctype>
 #include <exception>
 #include <iostream>
 #include <memory>
@@ -41,9 +43,11 @@ void ClientConnection::handleConnection() {
           auto [command, args] = parseCommand(ss);
 
           if (isInSubscribedMode() && !command->isSubscribedModeCommand()) {
+            std::string command_type = command->getTypeStr();
+            std::transform(command_type.begin(), command_type.end(),
+                           command_type.begin(), tolower);
             auto resp_error = std::make_unique<RespError>(
-                "Can't execute " + command->getTypeStr() +
-                " in subscribed mode");
+                "Can't execute '" + command_type + "' in subscribed mode");
             writeToSocket(getSocketFd(), resp_error->serialize());
             continue;
           }
