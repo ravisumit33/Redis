@@ -41,7 +41,7 @@ public:
         {STRING, "string"}, {STREAM, "stream"}};
     auto it = type_str.find(m_type);
     if (it == type_str.end()) {
-      throw std::runtime_error("Unknown type of redis store value");
+      throw std::logic_error("Unknown type of redis store value");
     }
     return it->second;
   }
@@ -191,55 +191,62 @@ private:
   mutable std::unordered_map<std::string, FifoBlockingQueue> m_blocking_queues;
   mutable std::mutex m_blocking_queues_mutex;
 
-  void notifyBlockingClients(const std::string& key) const;
+  void notifyBlockingClients(const std::string &key) const;
 
   class StoreReadGuard {
   public:
-    explicit StoreReadGuard(const RedisStore& store) 
+    explicit StoreReadGuard(const RedisStore &store)
         : m_store(store.m_store), m_lock(store.m_mutex) {}
-    
-    const auto& operator*() const { return m_store; }
-    const auto* operator->() const { return &m_store; }
-    
+
+    const auto &operator*() const { return m_store; }
+    const auto *operator->() const { return &m_store; }
+
   private:
-    const std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>>& m_store;
+    const std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>>
+        &m_store;
     std::shared_lock<std::shared_mutex> m_lock;
   };
 
   class StoreWriteGuard {
   public:
-    explicit StoreWriteGuard(const RedisStore& store) 
-        : m_store(const_cast<std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>>&>(store.m_store)), 
+    explicit StoreWriteGuard(const RedisStore &store)
+        : m_store(const_cast<std::unordered_map<
+                      std::string, std::unique_ptr<RedisStoreValue>> &>(
+              store.m_store)),
           m_lock(store.m_mutex) {}
-    
-    auto& operator*() { return m_store; }
-    auto* operator->() { return &m_store; }
-    
+
+    auto &operator*() { return m_store; }
+    auto *operator->() { return &m_store; }
+
   private:
-    std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>>& m_store;
+    std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>> &m_store;
     std::unique_lock<std::shared_mutex> m_lock;
   };
 
   class BlockingQueuesGuard {
   public:
-    explicit BlockingQueuesGuard(const RedisStore& store) 
-        : m_queues(const_cast<std::unordered_map<std::string, FifoBlockingQueue>&>(store.m_blocking_queues)), 
+    explicit BlockingQueuesGuard(const RedisStore &store)
+        : m_queues(
+              const_cast<std::unordered_map<std::string, FifoBlockingQueue> &>(
+                  store.m_blocking_queues)),
           m_lock(store.m_blocking_queues_mutex) {}
-    
-    auto& operator*() { return m_queues; }
-    auto* operator->() { return &m_queues; }
-    
-    FifoBlockingQueue& getQueue(const std::string& key) { return m_queues[key]; }
-    
+
+    auto &operator*() { return m_queues; }
+    auto *operator->() { return &m_queues; }
+
+    FifoBlockingQueue &getQueue(const std::string &key) {
+      return m_queues[key];
+    }
+
   private:
-    std::unordered_map<std::string, FifoBlockingQueue>& m_queues;
+    std::unordered_map<std::string, FifoBlockingQueue> &m_queues;
     std::unique_lock<std::mutex> m_lock;
   };
 
 public:
   StoreReadGuard readStore() const { return StoreReadGuard(*this); }
   StoreWriteGuard writeStore() const { return StoreWriteGuard(*this); }
-  BlockingQueuesGuard blockingQueues() const { return BlockingQueuesGuard(*this); }
+  BlockingQueuesGuard blockingQueues() const {
+    return BlockingQueuesGuard(*this);
+  }
 };
-
-

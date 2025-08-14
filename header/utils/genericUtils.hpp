@@ -24,7 +24,7 @@ std::string readFromSocket(unsigned socket_fd);
 
 void writeToSocket(unsigned socket_fd, const std::string &data);
 
-std::pair<Command *, std::vector<std::unique_ptr<RespType>>>
+std::pair<std::unique_ptr<Command>, std::vector<std::unique_ptr<RespType>>>
 parseCommand(std::istream &in);
 
 std::array<std::optional<uint64_t>, 2>

@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -112,21 +113,23 @@ private:
 
 class RespBulkString : public RespType {
 public:
-  RespBulkString(std::string val = "", bool lastCrlf = true)
+  RespBulkString() : RespType(BULK_STRING), m_value(std::nullopt) {}
+
+  RespBulkString(std::string val, bool lastCrlf = true)
       : RespType(BULK_STRING), m_value(std::move(val)), m_lastCrlf(lastCrlf) {}
 
   virtual std::unique_ptr<RespType> clone() override {
     return std::make_unique<RespBulkString>(*this);
   }
 
-  std::string getValue() const { return m_value; }
+  std::string getValue() const { return *m_value; }
 
   virtual std::string serialize() override {
-    if (m_value.empty()) {
+    if (!m_value) {
       return std::string("$-1") + CRLF;
     }
-    auto resp =
-        std::string("$") + std::to_string(m_value.length()) + CRLF + getValue();
+    auto resp = std::string("$") + std::to_string(m_value->length()) + CRLF +
+                getValue();
     if (m_lastCrlf) {
       resp += CRLF;
     }
@@ -134,7 +137,7 @@ public:
   }
 
 private:
-  std::string m_value;
+  std::optional<std::string> m_value;
   bool m_lastCrlf;
 };
 

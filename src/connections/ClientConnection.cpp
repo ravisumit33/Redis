@@ -5,6 +5,7 @@
 #include "utils/genericUtils.hpp"
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -39,8 +40,16 @@ void ClientConnection::handleConnection() {
         try {
           auto [command, args] = parseCommand(ss);
 
+          if (isInSubscribedMode() && !command->isSubscribedModeCommand()) {
+            auto resp_error = std::make_unique<RespError>(
+                "Can't execute " + command->getTypeStr() +
+                " in subscribed mode");
+            writeToSocket(getSocketFd(), resp_error->serialize());
+            continue;
+          }
+
           if (isInTransaction() && !command->isControlCommand()) {
-            queueCommand(command, std::move(args));
+            queueCommand(std::move(command), std::move(args));
             auto resp = std::make_unique<RespString>("QUEUED");
             writeToSocket(getSocketFd(), resp->serialize());
           } else {
@@ -96,4 +105,13 @@ std::unique_ptr<RespType> ClientConnection::executeTransaction() {
   m_queued_commands.clear();
   m_in_transaction = false;
   return resp_array;
+}
+
+void ClientConnection::RedisSubscriber::onMessage(const std::string &msg) {
+  auto resp_array = std::make_unique<RespArray>();
+  resp_array->add(std::make_unique<RespBulkString>("message"))
+      ->add(std::make_unique<RespBulkString>(m_channel_name))
+      ->add(std::make_unique<RespBulkString>(msg));
+  ;
+  writeToSocket(m_con->getSocketFd(), resp_array->serialize());
 }

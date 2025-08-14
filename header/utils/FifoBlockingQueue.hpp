@@ -13,6 +13,11 @@ public:
     WaitToken(FifoBlockingQueue &queue);
     ~WaitToken();
 
+    WaitToken(const WaitToken &) = delete;
+    WaitToken &operator=(const WaitToken &) = delete;
+    WaitToken(WaitToken &&) = delete;
+    WaitToken &operator=(WaitToken &&) = delete;
+
     template <typename Rep, typename Period>
     bool wait_for(const std::chrono::duration<Rep, Period> &timeout) {
       std::unique_lock<std::mutex> lock(m_mutex);
@@ -30,6 +35,8 @@ public:
     FifoBlockingQueue *m_queue;
     std::mutex m_mutex;
     std::condition_variable m_cv;
+
+    friend class FifoBlockingQueue;
   };
 
   std::unique_ptr<WaitToken> create_wait_token();
@@ -39,6 +46,8 @@ public:
   void notify_all();
 
   std::size_t waiting_count() const;
+
+  ~FifoBlockingQueue();
 
 private:
   mutable std::mutex m_queue_mutex;

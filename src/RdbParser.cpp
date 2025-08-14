@@ -163,7 +163,7 @@ void RdbKeyValueExpMsParser::parse(std::istream &is) {
   if (!parser) {
     throw std::logic_error("Unexpected: parser not found");
   }
-  auto value_parser = static_cast<RdbValueParser *>(parser);
+  auto value_parser = static_cast<RdbValueParser *>(parser.get());
   value_parser->parseKeyValue(is,
                               std::chrono::system_clock::time_point{expiry});
 }
@@ -184,7 +184,7 @@ void RdbKeyValueExpSParser::parse(std::istream &is) {
   if (!parser) {
     throw std::logic_error("Unexpected: parser not found");
   }
-  auto value_parser = static_cast<RdbValueParser *>(parser);
+  auto value_parser = static_cast<RdbValueParser *>(parser.get());
   value_parser->parseKeyValue(is,
                               std::chrono::system_clock::time_point{expiry});
 }

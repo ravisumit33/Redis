@@ -13,7 +13,7 @@ GetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
   auto stored_value = RedisStore::instance().get(key);
   if (!stored_value) {
-    result.push_back(std::make_unique<RespBulkString>(""));
+    result.push_back(std::make_unique<RespBulkString>());
     return result;
   }
 

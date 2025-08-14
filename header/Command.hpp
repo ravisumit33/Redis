@@ -4,6 +4,7 @@
 #include "Registry.hpp"
 #include "RespType.hpp"
 #include <memory>
+#include <string>
 #include <vector>
 
 class Connection;
@@ -36,7 +37,10 @@ public:
     LLEN,
     LPOP,
     LRANGE,
-    BLPOP
+    BLPOP,
+    SUBSCRIBE,
+    UNSUBSCRIBE,
+    PUBLISH
   };
 
   std::vector<std::unique_ptr<RespType>>
@@ -54,9 +58,13 @@ public:
 
   Type getType() const { return m_type; }
 
+  std::string getTypeStr() const;
+
   bool isWriteCommand() const;
 
   bool isControlCommand() const;
+
+  bool isSubscribedModeCommand() const;
 
 protected:
   Command(Type t) : m_type(t) {}

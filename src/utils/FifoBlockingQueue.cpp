@@ -1,5 +1,6 @@
 #include "utils/FifoBlockingQueue.hpp"
 #include <algorithm>
+#include <cstddef>
 
 FifoBlockingQueue::WaitToken::WaitToken(FifoBlockingQueue &queue)
     : m_queue(&queue) {}
@@ -42,6 +43,14 @@ void FifoBlockingQueue::remove_wait_token(WaitToken *token) {
   std::lock_guard<std::mutex> lock(m_queue_mutex);
   auto it = std::find(m_waiting_list.begin(), m_waiting_list.end(), token);
   if (it != m_waiting_list.end()) {
+    (*it)->m_queue = nullptr;
     m_waiting_list.erase(it);
+  }
+}
+
+FifoBlockingQueue::~FifoBlockingQueue() {
+  std::lock_guard<std::mutex> lock(m_queue_mutex);
+  for (auto token : m_waiting_list) {
+    (*token).m_queue = nullptr;
   }
 }

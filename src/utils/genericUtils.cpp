@@ -67,7 +67,7 @@ void writeToSocket(unsigned socket_fd, const std::string &data) {
   send(socket_fd, data.c_str(), data.length(), 0);
 }
 
-std::pair<Command *, std::vector<std::unique_ptr<RespType>>>
+std::pair<std::unique_ptr<Command>, std::vector<std::unique_ptr<RespType>>>
 parseCommand(std::istream &in) {
   char type;
   in.get(type);
@@ -113,7 +113,7 @@ parseCommand(std::istream &in) {
   }
   command_args.erase(command_args.begin());
 
-  return {command, std::move(command_args)};
+  return {std::move(command), std::move(command_args)};
 }
 
 std::array<uint64_t, 2> parseStreamEntryId(const std::string &s) {
