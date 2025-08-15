@@ -40,7 +40,8 @@ public:
     BLPOP,
     SUBSCRIBE,
     UNSUBSCRIBE,
-    PUBLISH
+    PUBLISH,
+    ZADD
   };
 
   std::vector<std::unique_ptr<RespType>>

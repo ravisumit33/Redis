@@ -68,13 +68,11 @@ RedisStore::addListElementsAtEnd(const std::string &key,
   std::size_t ret = elements.size();
   if (it == store->end()) {
     auto val = std::make_unique<ListValue>(elements);
-    std::cout << "List size after pushing: " << val->size() << std::endl;
     store->insert_or_assign(key, std::move(val));
   } else {
     auto &list = static_cast<ListValue &>(*it->second);
     ret += list.size();
     list.insertAtEnd(elements);
-    std::cout << "List size after pushing: " << list.size() << std::endl;
   }
   notifyBlockingClients(key);
   return ret;
@@ -89,13 +87,11 @@ RedisStore::addListElementsAtBegin(const std::string &key,
   std::size_t ret = elements.size();
   if (it == store->end()) {
     auto val = std::make_unique<ListValue>(elements);
-    std::cout << "List size after pushing: " << val->size() << std::endl;
     store->insert_or_assign(key, std::move(val));
   } else {
     auto &list = static_cast<ListValue &>(*it->second);
     ret += list.size();
     list.insertAtBegin(elements);
-    std::cout << "List size after pushing: " << list.size() << std::endl;
   }
   notifyBlockingClients(key);
   return ret;
@@ -106,43 +102,33 @@ RedisStore::removeListElementsAtBegin(const std::string &key,
                                       unsigned int count,
                                       std::optional<double> timeout_s) {
 
-  std::cout << "Count: " << count << std::endl;
   if (!timeout_s) {
     std::cerr << "No timeout given" << std::endl;
   } else {
-    std::cout << "Timeout: " << *timeout_s << std::endl;
   }
   std::vector<std::string> popped_elements;
   auto pop_elements = [&]() {
-    std::cout << "Going to pop " << count << " elements for key: " << key
-              << std::endl;
     auto store = readStore();
     auto it = store->find(key);
     if (it == store->end()) {
-      std::cout << "Key: " << key << " not found" << std::endl;
       return;
     }
     auto &list = static_cast<ListValue &>(*it->second);
-    std::cout << "List size before pop: " << list.size() << std::endl;
     while (!list.empty() && count--) {
       popped_elements.push_back(list.pop_front());
     }
-    std::cout << "Count after pop: " << count << std::endl;
-    std::cout << "List size after pop: " << list.size() << std::endl;
   };
 
   pop_elements();
 
   bool timed_out = false;
   if (count && timeout_s) {
-    std::cout << "Timeout: " << *timeout_s << std::endl;
     auto wait_token = blockingQueues().getQueue(key).create_wait_token();
 
     if (*timeout_s == 0) {
       while (count) {
         wait_token->wait();
         pop_elements();
-        std::cout << "Inside main loop, count: " << count << std::endl;
       }
     } else {
       auto timeout_duration =
@@ -510,4 +496,22 @@ void RedisStore::notifyBlockingClients(const std::string &key) const {
   if (it != queues->end()) {
     it->second.notify_one();
   }
+}
+
+std::size_t RedisStore::addMemberToSet(const std::string &key, double score,
+                                       const std::string &member) {
+  auto store = writeStore();
+  auto it = store->find(key);
+
+  std::size_t ret = 1;
+  if (it == store->end()) {
+    auto val = std::make_unique<SetValue>();
+    store->insert_or_assign(key, std::move(val));
+  } else {
+    auto &set = static_cast<SetValue &>(*it->second);
+    // TODO: handle existing member
+    set.addMember(score, member);
+  }
+  notifyBlockingClients(key);
+  return ret;
 }

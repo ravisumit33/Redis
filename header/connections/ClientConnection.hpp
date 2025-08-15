@@ -19,12 +19,12 @@ public:
   public:
     void onMessage(const std::string &msg) override;
 
-  private:
     RedisSubscriber(RedisChannel &ch, ClientConnection &con)
         : m_channel_name(ch.getName()), m_con(con) {}
+
+  private:
     std::string m_channel_name;
     ClientConnection &m_con;
-    friend class RedisChannel::Subscriber;
   };
 
   virtual void handleConnection() override;
@@ -87,6 +87,6 @@ private:
                         std::vector<std::unique_ptr<RespType>>>>
       m_queued_commands;
 
-  std::unordered_map<std::string, std::unique_ptr<RedisSubscriber>>
+  std::unordered_map<std::string, std::shared_ptr<RedisSubscriber>>
       m_channel_subscriptions;
 };

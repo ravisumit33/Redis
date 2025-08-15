@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <shared_mutex>
 #include <stdexcept>
 #include <string>
@@ -16,7 +17,7 @@
 
 class RedisStoreValue {
 public:
-  enum Type { STRING, STREAM, LIST };
+  enum Type { STRING, STREAM, LIST, SET };
 
   virtual ~RedisStoreValue() = default;
 
@@ -38,7 +39,7 @@ public:
 
   std::string getTypeStr() const {
     static std::unordered_map<Type, std::string> type_str = {
-        {STRING, "string"}, {STREAM, "stream"}};
+        {STRING, "string"}, {STREAM, "stream"}, {LIST, "list"}, {SET, "set"}};
     auto it = type_str.find(m_type);
     if (it == type_str.end()) {
       throw std::logic_error("Unknown type of redis store value");
@@ -138,6 +139,25 @@ private:
   std::deque<std::string> m_elements;
 };
 
+class SetValue : public RedisStoreValue {
+public:
+  SetValue() : RedisStoreValue(SET) {}
+
+  SetValue &addMember(double score, const std::string &member) {
+    m_set.insert({score, member});
+    return *this;
+  }
+
+  std::size_t size() const { return m_set.size(); }
+
+  virtual std::unique_ptr<RedisStoreValue> clone() const override {
+    return std::make_unique<SetValue>(*this);
+  };
+
+private:
+  std::set<std::pair<double, std::string>> m_set;
+};
+
 class RedisStore {
 public:
   void setString(
@@ -176,6 +196,9 @@ public:
       const std::vector<std::string> &store_keys,
       const std::vector<std::string> &entry_ids_start,
       std::optional<uint64_t> timeout_ms = std::nullopt) const;
+
+  std::size_t addMemberToSet(const std::string &key, double score,
+                             const std::string &member);
 
   static RedisStore &instance() {
     static RedisStore instance;
