@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class ClientConnection : public Connection {
@@ -17,7 +18,7 @@ public:
   class RedisSubscriber : public RedisChannel::Subscriber {
   public:
     RedisSubscriber(RedisChannel &ch, ClientConnection *con)
-        : m_channel_name(ch.getName()) {}
+        : m_channel_name(ch.getName()), m_con(con) {}
 
     void onMessage(const std::string &msg) override;
 
@@ -87,6 +88,6 @@ private:
                         std::vector<std::unique_ptr<RespType>>>>
       m_queued_commands;
 
-  std::map<std::string, std::shared_ptr<RedisSubscriber>>
+  std::unordered_map<std::string, std::shared_ptr<RedisSubscriber>>
       m_channel_subscriptions;
 };
