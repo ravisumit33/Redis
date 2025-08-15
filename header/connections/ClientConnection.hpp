@@ -17,14 +17,14 @@ public:
 
   class RedisSubscriber : public RedisChannel::Subscriber {
   public:
-    RedisSubscriber(RedisChannel &ch, ClientConnection &con)
-        : m_channel_name(ch.getName()), m_con(con) {}
-
     void onMessage(const std::string &msg) override;
 
   private:
+    RedisSubscriber(RedisChannel &ch, ClientConnection &con)
+        : m_channel_name(ch.getName()), m_con(con) {}
     std::string m_channel_name;
     ClientConnection &m_con;
+    friend class RedisChannel::Subscriber;
   };
 
   virtual void handleConnection() override;
@@ -55,9 +55,8 @@ public:
   std::size_t subscribeToChannel(const std::string &channel_name) {
     if (!m_channel_subscriptions.contains(channel_name)) {
       auto channel = RedisChannelManager::instance().getChannel(channel_name);
-      auto subscriber =
+      m_channel_subscriptions[channel_name] =
           RedisChannel::Subscriber::create<RedisSubscriber>(*channel, *this);
-      m_channel_subscriptions[channel_name] = subscriber;
     }
     m_in_subscribed_mode = true;
     return m_channel_subscriptions.size();
@@ -88,6 +87,6 @@ private:
                         std::vector<std::unique_ptr<RespType>>>>
       m_queued_commands;
 
-  std::unordered_map<std::string, std::shared_ptr<RedisSubscriber>>
+  std::unordered_map<std::string, std::unique_ptr<RedisSubscriber>>
       m_channel_subscriptions;
 };

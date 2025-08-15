@@ -5,6 +5,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class RedisChannel {
 public:
@@ -19,21 +20,22 @@ public:
     virtual void onMessage(const std::string &msg) = 0;
 
     template <typename T, typename... Args>
-    static std::shared_ptr<T> create(RedisChannel &ch, Args &&...args) {
+    static std::unique_ptr<T> create(RedisChannel &ch, Args &&...args) {
       static_assert(std::is_base_of<Subscriber, T>::value,
                     "T must inherit from Subscriber");
-      auto sub = std::shared_ptr<T>(new T(ch, std::forward<Args>(args)...));
-      sub->m_token = ch.subscribe(sub);
+      // Use direct new instead of make_unique to access private constructor
+      auto sub = std::unique_ptr<T>(new T(ch, std::forward<Args>(args)...));
+      sub->m_token = ch.subscribe(*sub);
       return sub;
     }
 
   private:
-    std::shared_ptr<SubscriptionToken> m_token;
+    std::unique_ptr<SubscriptionToken> m_token;
   };
 
   class SubscriptionToken {
   public:
-    SubscriptionToken(RedisChannel &ch, std::shared_ptr<Subscriber> sub)
+    SubscriptionToken(RedisChannel &ch, Subscriber &sub)
         : m_channel(&ch), m_subscriber(sub) {}
 
     ~SubscriptionToken() {
@@ -47,22 +49,15 @@ public:
     SubscriptionToken(SubscriptionToken &&) = delete;
     SubscriptionToken &operator=(SubscriptionToken &&) = delete;
 
-    void message(const std::string &msg) {
-      if (auto subscriber = m_subscriber.lock()) {
-        try {
-          subscriber->onMessage(msg);
-        } catch (...) {
-        }
-      }
-    }
+    void message(const std::string &msg) { m_subscriber.onMessage(msg); }
 
   private:
     RedisChannel *m_channel;
-    std::weak_ptr<Subscriber> m_subscriber;
+    Subscriber &m_subscriber;
     friend class RedisChannel;
   };
 
-  std::shared_ptr<SubscriptionToken> subscribe(std::shared_ptr<Subscriber> sub);
+  std::unique_ptr<SubscriptionToken> subscribe(Subscriber &sub);
 
   std::size_t subscribersCount() const { return m_subscribers.size(); }
 
@@ -72,8 +67,7 @@ public:
 
 private:
   std::string m_name;
-  std::unordered_map<Subscriber *, std::weak_ptr<SubscriptionToken>>
-      m_subscribers;
+  std::vector<SubscriptionToken *> m_subscribers;
   mutable std::mutex m_mutex;
 
   void unsubscribe(SubscriptionToken *sub_token);

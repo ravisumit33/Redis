@@ -117,5 +117,5 @@ void ClientConnection::RedisSubscriber::onMessage(const std::string &msg) {
       ->add(std::make_unique<RespBulkString>(m_channel_name))
       ->add(std::make_unique<RespBulkString>(msg));
   ;
-  writeToSocket(m_con->getSocketFd(), resp_array->serialize());
+  writeToSocket(m_con.getSocketFd(), resp_array->serialize());
 }

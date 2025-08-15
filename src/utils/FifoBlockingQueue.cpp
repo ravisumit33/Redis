@@ -43,9 +43,9 @@ void FifoBlockingQueue::remove_wait_token(WaitToken *token) {
   std::lock_guard<std::mutex> lock(m_queue_mutex);
   auto it = std::find(m_waiting_list.begin(), m_waiting_list.end(), token);
   if (it != m_waiting_list.end()) {
-    (*it)->m_queue = nullptr;
     m_waiting_list.erase(it);
   }
+  token->m_queue = nullptr;
 }
 
 FifoBlockingQueue::~FifoBlockingQueue() {
