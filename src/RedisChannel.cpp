@@ -27,7 +27,8 @@ std::shared_ptr<RedisChannel::SubscriptionToken>
 RedisChannel::subscribe(std::shared_ptr<Subscriber> sub) {
   std::lock_guard<std::shared_mutex> lock(m_mutex);
   SubscriptionTokenId token_id = m_next_sub_id++;
-  auto sub_token = SubscriptionToken::create(token_id, shared_from_this(), sub);
+  auto sub_token =
+      std::make_shared<SubscriptionToken>(token_id, shared_from_this(), sub);
   m_subscribers[token_id] = sub_token;
   return sub_token;
 }

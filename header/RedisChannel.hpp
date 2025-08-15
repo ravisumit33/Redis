@@ -51,6 +51,10 @@ public:
       }
     }
 
+    SubscriptionToken(SubscriptionTokenId id, std::shared_ptr<RedisChannel> ch,
+                      std::shared_ptr<Subscriber> sub)
+        : m_id(id), m_channel_weak(ch), m_subscriber_weak(sub) {}
+
   private:
     std::weak_ptr<RedisChannel> m_channel_weak;
     std::weak_ptr<Subscriber> m_subscriber_weak;
@@ -60,15 +64,6 @@ public:
       if (auto channel = m_channel_weak.lock()) {
         channel->unsubscribe(m_id);
       }
-    }
-
-    SubscriptionToken(SubscriptionTokenId id, std::shared_ptr<RedisChannel> ch,
-                      std::shared_ptr<Subscriber> sub)
-        : m_id(id), m_channel_weak(ch), m_subscriber_weak(sub) {}
-
-    template <typename... Args>
-    static std::shared_ptr<SubscriptionToken> create(Args &&...args) {
-      return std::make_shared<SubscriptionToken>(std::forward<Args>(args)...);
     }
 
     friend class RedisChannel;
