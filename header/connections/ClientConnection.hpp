@@ -17,14 +17,14 @@ public:
 
   class RedisSubscriber : public RedisChannel::Subscriber {
   public:
-    RedisSubscriber(RedisChannel &ch, ClientConnection *con)
+    RedisSubscriber(RedisChannel &ch, ClientConnection &con)
         : m_channel_name(ch.getName()), m_con(con) {}
 
     void onMessage(const std::string &msg) override;
 
   private:
     std::string m_channel_name;
-    ClientConnection *m_con;
+    ClientConnection &m_con;
   };
 
   virtual void handleConnection() override;
@@ -56,7 +56,7 @@ public:
     if (!m_channel_subscriptions.contains(channel_name)) {
       auto channel = RedisChannelManager::instance().getChannel(channel_name);
       auto subscriber =
-          RedisChannel::Subscriber::create<RedisSubscriber>(*channel, this);
+          RedisChannel::Subscriber::create<RedisSubscriber>(*channel, *this);
       m_channel_subscriptions[channel_name] = subscriber;
     }
     m_in_subscribed_mode = true;
