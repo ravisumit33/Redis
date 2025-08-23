@@ -13,7 +13,11 @@ public:
 
   bool addMember(double score, const std::string &member);
 
+  bool empty() const { return m_score_map.empty(); }
+
   unsigned int getRank(const std::string &member);
+
+  std::vector<std::string> getElementsInRange(int start_idx, int end_idx);
 
   std::size_t size() const { return m_set.size(); }
 

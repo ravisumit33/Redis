@@ -42,7 +42,8 @@ public:
     UNSUBSCRIBE,
     PUBLISH,
     ZADD,
-    ZRANK
+    ZRANK,
+    ZRANGE
   };
 
   std::vector<std::unique_ptr<RespType>>

@@ -49,6 +49,7 @@ std::string Command::getTypeStr() const {
       {PUBLISH, "PUBLISH"},
       {ZADD, "ZADD"},
       {ZRANK, "ZRANK"},
+      {ZRANGE, "ZRANGE"},
   };
 
   auto it = type_strings.find(m_type);

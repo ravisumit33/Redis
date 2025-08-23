@@ -1,12 +1,12 @@
-#include "commands/LrangeCommand.hpp"
+#include "commands/ZrangeCommand.hpp"
 #include "RespType.hpp"
 #include "redis_store/RedisStore.hpp"
-#include "redis_store/values/ListValue.hpp"
+#include "redis_store/values/SetValue.hpp"
 
-CommandRegistrar<LrangeCommand> LrangeCommand::registrar("LRANGE");
+CommandRegistrar<ZrangeCommand> ZrangeCommand::registrar("ZRANGE");
 
 std::vector<std::unique_ptr<RespType>>
-LrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
+ZrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
                            Connection &connection) {
   std::vector<std::unique_ptr<RespType>> result;
   auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
@@ -17,10 +17,10 @@ LrangeCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
   auto val = RedisStore::instance().get(store_key);
   auto resp_array = std::make_unique<RespArray>();
   if (val) {
-    auto list_val = static_cast<ListValue &>(*(val.value()));
-    auto list_elements = list_val.getElementsInRange(start_idx, end_idx);
-    for (const auto &list_el : list_elements) {
-      resp_array->add(std::make_unique<RespBulkString>(list_el));
+    auto set_val = static_cast<SetValue &>(*(val.value()));
+    auto set_members = set_val.getElementsInRange(start_idx, end_idx);
+    for (const auto &set_member : set_members) {
+      resp_array->add(std::make_unique<RespBulkString>(set_member));
     }
   }
   result.push_back(std::move(resp_array));
