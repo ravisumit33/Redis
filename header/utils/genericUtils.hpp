@@ -1,12 +1,13 @@
 #pragma once
 
 #include "Command.hpp"
-#include "RedisStore.hpp"
 #include "RespType.hpp"
+#include "redis_store/values/StreamValue.hpp"
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <cstdint>
+#include <istream>
 #include <memory>
 #include <optional>
 #include <stdexcept>

@@ -1,7 +1,8 @@
 #include "commands/LrangeCommand.hpp"
 #include "Connection.hpp"
-#include "RedisStore.hpp"
 #include "RespType.hpp"
+#include "redis_store/RedisStore.hpp"
+#include "redis_store/values/ListValue.hpp"
 
 CommandRegistrar<LrangeCommand> LrangeCommand::registrar("LRANGE");
 

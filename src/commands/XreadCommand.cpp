@@ -1,6 +1,6 @@
 #include "commands/XreadCommand.hpp"
 #include "Connection.hpp"
-#include "RedisStore.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 #include "utils/genericUtils.hpp"
 #include <optional>

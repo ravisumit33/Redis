@@ -1,6 +1,6 @@
 #include "commands/SetCommand.hpp"
 #include "Connection.hpp"
-#include "RedisStore.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 #include <chrono>
 #include <cstddef>

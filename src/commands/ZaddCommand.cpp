@@ -1,7 +1,7 @@
 #include "commands/ZaddCommand.hpp"
 #include "Connection.hpp"
-#include "RedisStore.hpp"
 #include "RespType.hpp"
+#include "redis_store/RedisStore.hpp"
 #include <iostream>
 #include <memory>
 
@@ -17,7 +17,7 @@ ZaddCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
 
   auto added_count =
       RedisStore::instance().addMemberToSet(store_key, score, member);
-  std::cout << "Member: " << member << "with score: " << score
+  std::cout << "Member: " << member << " with score: " << score
             << " added to set with key: " << store_key << std::endl;
   result.push_back(std::make_unique<RespInt>(added_count));
   return result;

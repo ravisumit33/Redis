@@ -1,166 +1,14 @@
-#include "RedisStore.hpp"
+#include "redis_store/RedisStore.hpp"
+#include "redis_store/values/StreamValue.hpp"
 #include "utils/genericUtils.hpp"
-#include <algorithm>
-#include <atomic>
-#include <cassert>
 #include <chrono>
-#include <condition_variable>
-#include <cstdint>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <mutex>
-#include <optional>
-#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <tuple>
 #include <unordered_map>
 #include <vector>
-
-StreamValue::StreamEntryId StreamValue::getTopEntry() const {
-  if (mStreams.empty()) {
-    throw std::logic_error("Stream should not be empty");
-  }
-  auto it = mStreams.rbegin();
-  return it->first;
-}
-
-std::vector<std::string> ListValue::getElementsInRange(int start_idx,
-                                                       int end_idx) {
-  if (empty()) {
-    return {};
-  }
-  std::size_t num_elements = m_elements.size();
-  if (start_idx < 0) {
-    start_idx += num_elements;
-  }
-  if (end_idx < 0) {
-    end_idx += num_elements;
-  }
-  start_idx = std::max(start_idx, 0);
-  end_idx = std::min<int>(end_idx, num_elements - 1);
-  if (start_idx > end_idx) {
-    return {};
-  }
-
-  std::vector<std::string> elements(m_elements.begin() + start_idx,
-                                    m_elements.begin() + end_idx + 1);
-  return elements;
-}
-
-void RedisStore::setString(
-    const std::string &key, const std::string &value,
-    std::optional<std::chrono::system_clock::time_point> exp) {
-  auto store = writeStore();
-  auto val = std::make_unique<StringValue>(value, exp);
-  store->insert_or_assign(key, std::move(val));
-  notifyBlockingClients(key);
-}
-
-std::size_t
-RedisStore::addListElementsAtEnd(const std::string &key,
-                                 const std::vector<std::string> &elements) {
-  auto store = writeStore();
-  auto it = store->find(key);
-
-  std::size_t ret = elements.size();
-  if (it == store->end()) {
-    auto val = std::make_unique<ListValue>(elements);
-    store->insert_or_assign(key, std::move(val));
-  } else {
-    auto &list = static_cast<ListValue &>(*it->second);
-    ret += list.size();
-    list.insertAtEnd(elements);
-  }
-  notifyBlockingClients(key);
-  return ret;
-}
-
-std::size_t
-RedisStore::addListElementsAtBegin(const std::string &key,
-                                   const std::vector<std::string> &elements) {
-  auto store = writeStore();
-  auto it = store->find(key);
-
-  std::size_t ret = elements.size();
-  if (it == store->end()) {
-    auto val = std::make_unique<ListValue>(elements);
-    store->insert_or_assign(key, std::move(val));
-  } else {
-    auto &list = static_cast<ListValue &>(*it->second);
-    ret += list.size();
-    list.insertAtBegin(elements);
-  }
-  notifyBlockingClients(key);
-  return ret;
-}
-
-std::pair<bool, std::vector<std::string>>
-RedisStore::removeListElementsAtBegin(const std::string &key,
-                                      unsigned int count,
-                                      std::optional<double> timeout_s) {
-
-  if (!timeout_s) {
-    std::cerr << "No timeout given" << std::endl;
-  } else {
-  }
-  std::vector<std::string> popped_elements;
-  auto pop_elements = [&]() {
-    auto store = readStore();
-    auto it = store->find(key);
-    if (it == store->end()) {
-      return;
-    }
-    auto &list = static_cast<ListValue &>(*it->second);
-    while (!list.empty() && count--) {
-      popped_elements.push_back(list.pop_front());
-    }
-  };
-
-  pop_elements();
-
-  bool timed_out = false;
-  if (count && timeout_s) {
-    auto wait_token = blockingQueues().getQueue(key).create_wait_token();
-
-    if (*timeout_s == 0) {
-      while (count) {
-        wait_token->wait();
-        pop_elements();
-      }
-    } else {
-      auto timeout_duration =
-          std::chrono::milliseconds(static_cast<uint64_t>(*timeout_s * 1000));
-      auto start_time = std::chrono::steady_clock::now();
-
-      while (count) {
-        auto elapsed = std::chrono::steady_clock::now() - start_time;
-        auto remaining =
-            timeout_duration -
-            std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
-
-        if (remaining <= std::chrono::milliseconds(0)) {
-          std::cerr << "Deadline of " << *timeout_s << " s reached"
-                    << std::endl;
-          timed_out = true;
-          break;
-        }
-
-        if (!wait_token->wait_for(remaining)) {
-          std::cerr << "Deadline of " << *timeout_s << " s reached"
-                    << std::endl;
-          timed_out = true;
-          break;
-        }
-
-        pop_elements();
-      }
-    }
-  }
-  return {timed_out, popped_elements};
-}
 
 StreamValue::StreamEntryId
 RedisStore::addStreamEntry(const std::string &key, const std::string &entry_id,
@@ -252,27 +100,6 @@ RedisStore::addStreamEntry(const std::string &key, const std::string &entry_id,
 
   notifyBlockingClients(key);
   return saved_entry_id;
-}
-
-std::optional<std::unique_ptr<RedisStoreValue>>
-RedisStore::get(const std::string &key) const {
-  auto store = readStore();
-  auto it = store->find(key);
-  if (it == store->end()) {
-    return std::nullopt;
-  }
-
-  auto &val = it->second;
-  if (val->hasExpired()) {
-    return std::nullopt;
-  }
-
-  return val->clone();
-}
-
-bool RedisStore::keyExists(const std::string &key) const {
-  auto store = readStore();
-  return store->contains(key);
 }
 
 std::vector<std::pair<StreamValue::StreamEntryId, StreamValue::StreamEntry>>
@@ -396,9 +223,9 @@ RedisStore::getStreamEntriesAfterAny(
   if (timeout_ms && ret.empty()) {
     std::vector<std::unique_ptr<FifoBlockingQueue::WaitToken>> wait_tokens;
     {
-      auto queues = blockingQueues();
       for (const auto &store_key : store_keys) {
-        wait_tokens.push_back(queues.getQueue(store_key).create_wait_token());
+        auto queue = getBlockingQueue(store_key);
+        wait_tokens.push_back(queue->create_wait_token());
       }
     }
 
@@ -480,38 +307,4 @@ RedisStore::getStreamEntriesAfterAny(
   }
 
   return {timed_out, ret};
-}
-
-std::vector<std::string> RedisStore::getKeys() const {
-  std::vector<std::string> keys;
-  auto store = readStore();
-  std::transform(store->begin(), store->end(), std::back_inserter(keys),
-                 [](const auto &pair) { return pair.first; });
-  return keys;
-}
-
-void RedisStore::notifyBlockingClients(const std::string &key) const {
-  auto queues = blockingQueues();
-  auto it = queues->find(key);
-  if (it != queues->end()) {
-    it->second.notify_one();
-  }
-}
-
-std::size_t RedisStore::addMemberToSet(const std::string &key, double score,
-                                       const std::string &member) {
-  auto store = writeStore();
-  auto it = store->find(key);
-
-  std::size_t ret = 1;
-  if (it == store->end()) {
-    auto val = std::make_unique<SetValue>();
-    store->insert_or_assign(key, std::move(val));
-  } else {
-    auto &set = static_cast<SetValue &>(*it->second);
-    // TODO: handle existing member
-    set.addMember(score, member);
-  }
-  notifyBlockingClients(key);
-  return ret;
 }

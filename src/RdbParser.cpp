@@ -1,5 +1,5 @@
 #include "RdbParser.hpp"
-#include "RedisStore.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "utils/genericUtils.hpp"
 #include <bit>
 #include <chrono>

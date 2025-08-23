@@ -1,7 +1,8 @@
 #include "commands/IncrCommand.hpp"
 #include "Connection.hpp"
-#include "RedisStore.hpp"
 #include "RespType.hpp"
+#include "redis_store/RedisStore.hpp"
+#include "redis_store/values/StringValue.hpp"
 #include <string>
 
 CommandRegistrar<IncrCommand> IncrCommand::registrar("INCR");

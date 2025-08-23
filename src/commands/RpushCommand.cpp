@@ -1,7 +1,7 @@
 #include "commands/RpushCommand.hpp"
 #include "Connection.hpp"
-#include "RedisStore.hpp"
 #include "RespType.hpp"
+#include "redis_store/RedisStore.hpp"
 #include <vector>
 
 CommandRegistrar<RpushCommand> RpushCommand::registrar("RPUSH");

@@ -1,7 +1,8 @@
 #include "commands/GetCommand.hpp"
 #include "Connection.hpp"
-#include "RedisStore.hpp"
 #include "RespType.hpp"
+#include "redis_store/RedisStore.hpp"
+#include "redis_store/values/StringValue.hpp"
 
 CommandRegistrar<GetCommand> GetCommand::registrar("GET");
 

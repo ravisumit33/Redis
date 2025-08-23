@@ -24,9 +24,21 @@ public:
       return m_cv.wait_for(lock, timeout) == std::cv_status::no_timeout;
     }
 
+    template <typename Rep, typename Period, typename Predicate>
+    bool wait_for(const std::chrono::duration<Rep, Period> &timeout,
+                  Predicate predicate) {
+      std::unique_lock<std::mutex> lock(m_mutex);
+      return m_cv.wait_for(lock, timeout, predicate);
+    }
+
     void wait() {
       std::unique_lock<std::mutex> lock(m_mutex);
       m_cv.wait(lock);
+    }
+
+    template <typename Predicate> void wait(Predicate predicate) {
+      std::unique_lock<std::mutex> lock(m_mutex);
+      m_cv.wait(lock, predicate);
     }
 
     void notify() { m_cv.notify_one(); }

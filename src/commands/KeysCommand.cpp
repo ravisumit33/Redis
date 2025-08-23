@@ -1,6 +1,6 @@
 #include "commands/KeysCommand.hpp"
 #include "Connection.hpp"
-#include "RedisStore.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 
 CommandRegistrar<KeysCommand> KeysCommand::registrar("KEYS");
