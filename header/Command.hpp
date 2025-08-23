@@ -43,7 +43,8 @@ public:
     PUBLISH,
     ZADD,
     ZRANK,
-    ZRANGE
+    ZRANGE,
+    ZCARD,
   };
 
   std::vector<std::unique_ptr<RespType>>

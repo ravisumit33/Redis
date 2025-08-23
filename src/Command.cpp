@@ -50,6 +50,7 @@ std::string Command::getTypeStr() const {
       {ZADD, "ZADD"},
       {ZRANK, "ZRANK"},
       {ZRANGE, "ZRANGE"},
+      {ZCARD, "ZCARD"},
   };
 
   auto it = type_strings.find(m_type);
