@@ -51,6 +51,8 @@ std::string Command::getTypeStr() const {
       {ZRANK, "ZRANK"},
       {ZRANGE, "ZRANGE"},
       {ZCARD, "ZCARD"},
+      {ZSCORE, "ZSCORE"},
+      {ZREM, "ZREM"},
   };
 
   auto it = type_strings.find(m_type);

@@ -1,4 +1,5 @@
 #include "redis_store/RedisStore.hpp"
+#include "redis_store/values/RedisStoreValue.hpp"
 #include "redis_store/values/StreamValue.hpp"
 #include "utils/genericUtils.hpp"
 #include <chrono>
@@ -59,6 +60,9 @@ RedisStore::addStreamEntry(const std::string &key, const std::string &entry_id,
     stream.addEntry(saved_entry_id, std::move(entry));
     (*store)[key] = std::move(stream_ptr);
   } else {
+    if (it->second->getType() != RedisStoreValue::STREAM) {
+      throw std::runtime_error("Provided key doesn't contain STREAM value");
+    }
     auto &stream = static_cast<StreamValue &>(*it->second);
     if (timestamp) {
       uint64_t now = nowMs();

@@ -57,6 +57,9 @@ public:
   unsigned int getSetMemberRank(const std::string &key,
                                 const std::string &member);
 
+  std::size_t removeMemberFromSet(const std::string &key,
+                                  const std::string &member);
+
   static RedisStore &instance() {
     static RedisStore instance;
     return instance;

@@ -24,6 +24,21 @@ std::size_t RedisStore::addMemberToSet(const std::string &key, double score,
 unsigned int RedisStore::getSetMemberRank(const std::string &key,
                                           const std::string &member) {
   auto store = readStore();
-  auto &set = static_cast<SetValue &>(*store->at(key));
+  auto &it = store->at(key);
+  if (it->getType() != RedisStoreValue::SET) {
+    throw std::runtime_error("Key doesn't correspond to SET value type");
+  }
+  auto &set = static_cast<SetValue &>(*it);
   return set.getRank(member);
+}
+
+std::size_t RedisStore::removeMemberFromSet(const std::string &key,
+                                            const std::string &member) {
+  auto store = readStore();
+  auto &it = store->at(key);
+  if (it->getType() != RedisStoreValue::SET) {
+    throw std::runtime_error("Key doesn't correspond to SET value type");
+  }
+  auto &set = static_cast<SetValue &>(*it);
+  return set.erase(member);
 }

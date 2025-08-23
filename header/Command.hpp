@@ -45,6 +45,8 @@ public:
     ZRANK,
     ZRANGE,
     ZCARD,
+    ZSCORE,
+    ZREM,
   };
 
   std::vector<std::unique_ptr<RespType>>

@@ -15,7 +15,7 @@ bool SetValue::addMember(double score, const std::string &member) {
   return inserted;
 }
 
-unsigned int SetValue::getRank(const std::string &member) {
+unsigned int SetValue::getRank(const std::string &member) const {
   double score = m_score_map.at(member);
   auto it = m_set.find({score, member});
   // This can be optimized if we use better data structure
@@ -47,4 +47,14 @@ std::vector<std::string> SetValue::getElementsInRange(int start_idx,
                  std::back_inserter(memberInRange),
                  [](const auto &p) { return p.second; });
   return memberInRange;
+}
+
+std::size_t SetValue::erase(const std::string &member) {
+  auto it = m_score_map.find(member);
+  if (it == m_score_map.end()) {
+    return 0;
+  }
+  m_set.erase({it->second, member});
+  m_score_map.erase(it);
+  return 1;
 }

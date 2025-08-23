@@ -15,11 +15,17 @@ public:
 
   bool empty() const { return m_score_map.empty(); }
 
-  unsigned int getRank(const std::string &member);
+  unsigned int getRank(const std::string &member) const;
+
+  double getScore(const std::string &member) const {
+    return m_score_map.at(member);
+  }
 
   std::vector<std::string> getElementsInRange(int start_idx, int end_idx);
 
   std::size_t size() const { return m_set.size(); }
+
+  std::size_t erase(const std::string &member);
 
   virtual std::unique_ptr<RedisStoreValue> clone() const override {
     return std::make_unique<SetValue>(*this);

@@ -1,8 +1,10 @@
 #include "redis_store/RedisStore.hpp"
 #include "redis_store/values/ListValue.hpp"
+#include "redis_store/values/RedisStoreValue.hpp"
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -17,6 +19,9 @@ RedisStore::addListElementsAtEnd(const std::string &key,
     auto val = std::make_unique<ListValue>(elements);
     store->insert_or_assign(key, std::move(val));
   } else {
+    if (it->second->getType() != RedisStoreValue::LIST) {
+      throw std::runtime_error("Key doesn't correspond to LIST value type");
+    }
     auto &list = static_cast<ListValue &>(*it->second);
     ret += list.size();
     list.insertAtEnd(elements);
@@ -36,6 +41,9 @@ RedisStore::addListElementsAtBegin(const std::string &key,
     auto val = std::make_unique<ListValue>(elements);
     store->insert_or_assign(key, std::move(val));
   } else {
+    if (it->second->getType() != RedisStoreValue::LIST) {
+      throw std::runtime_error("Key doesn't correspond to LIST value type");
+    }
     auto &list = static_cast<ListValue &>(*it->second);
     ret += list.size();
     list.insertAtBegin(elements);
@@ -55,6 +63,9 @@ RedisStore::removeListElementsAtBegin(const std::string &key,
     auto it = store->find(key);
     if (it == store->end()) {
       return;
+    }
+    if (it->second->getType() != RedisStoreValue::LIST) {
+      throw std::runtime_error("Key doesn't correspond to LIST value type");
     }
     auto &list = static_cast<ListValue &>(*it->second);
     while (!list.empty() && count--) {
