@@ -43,7 +43,7 @@ std::vector<std::string> SetValue::getElementsInRange(int start_idx,
 
   std::vector<std::string> memberInRange;
   std::transform(std::next(m_set.begin(), start_idx),
-                 std::next(m_set.end(), end_idx),
+                 std::next(m_set.begin(), end_idx + 1),
                  std::back_inserter(memberInRange),
                  [](const auto &p) { return p.second; });
   return memberInRange;
