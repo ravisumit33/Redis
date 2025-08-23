@@ -48,6 +48,7 @@ std::string Command::getTypeStr() const {
       {UNSUBSCRIBE, "UNSUBSCRIBE"},
       {PUBLISH, "PUBLISH"},
       {ZADD, "ZADD"},
+      {ZRANK, "ZRANK"},
   };
 
   auto it = type_strings.find(m_type);

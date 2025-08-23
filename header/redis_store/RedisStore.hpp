@@ -54,6 +54,9 @@ public:
   std::size_t addMemberToSet(const std::string &key, double score,
                              const std::string &member);
 
+  unsigned int getSetMemberRank(const std::string &key,
+                                const std::string &member);
+
   static RedisStore &instance() {
     static RedisStore instance;
     return instance;

@@ -20,3 +20,10 @@ std::size_t RedisStore::addMemberToSet(const std::string &key, double score,
   notifyBlockingClients(key);
   return inserted;
 }
+
+unsigned int RedisStore::getSetMemberRank(const std::string &key,
+                                          const std::string &member) {
+  auto store = readStore();
+  auto &set = static_cast<SetValue &>(*store->at(key));
+  return set.getRank(member);
+}
