@@ -3,26 +3,27 @@
 #include "Connection.hpp"
 #include "RespType.hpp"
 #include <functional>
-#include <memory>
 #include <vector>
 
 class ServerConnection : public Connection {
 public:
-  ServerConnection(const unsigned socket_fd, const AppConfig &config,
+  ServerConnection(unsigned socket_fd, AppContext &context,
                    const std::function<void()> &ready_callback)
-      : Connection(Type::SERVER, socket_fd, config),
+      : Connection(Type::SERVER, socket_fd, context),
         m_ready_callback(ready_callback) {}
 
-  virtual void handleConnection() override;
+  void handleConnection() override;
 
 private:
-  void sendCommand(std::vector<std::unique_ptr<RespType>> args);
+  void sendCommand(std::vector<RespValue> args);
 
   void validateResponse(auto validate);
 
   void configureRepl();
 
   void configurePsync();
+
+  void processBacklogCommands(std::istringstream &input_stream);
 
   void handShake();
 

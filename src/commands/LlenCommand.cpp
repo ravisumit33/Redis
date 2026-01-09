@@ -1,22 +1,37 @@
 #include "commands/LlenCommand.hpp"
-#include "Connection.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
-#include "redis_store/RedisStore.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 #include "redis_store/values/ListValue.hpp"
 
-CommandRegistrar<LlenCommand> LlenCommand::registrar("LLEN");
-
-std::vector<std::unique_ptr<RespType>>
-LlenCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
-  auto val = RedisStore::instance().get(store_key);
+std::vector<RespValue>
+LlenCommand::doExecute(const std::vector<RespValue> &args,
+                       AppContext &context) {
+  std::vector<RespValue> result;
+  auto store_key = getStringValue(args.at(0));
+  auto val = context.getRedisStore().get(store_key);
   if (!val) {
-    result.push_back(std::make_unique<RespInt>(0));
+    result.emplace_back(RespInt(0));
     return result;
   }
-  auto list_val = static_cast<ListValue &>(*(val.value()));
-  result.push_back(std::make_unique<RespInt>(list_val.size()));
+  auto *list_val = std::get_if<ListValue>(&val.value());
+  if (list_val == nullptr) {
+    result.emplace_back(RespInt(0));
+    return result;
+  }
+  result.emplace_back(RespInt(static_cast<int64_t>(list_val->size())));
   return result;
+}
+
+std::vector<RespValue>
+LlenCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+LlenCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

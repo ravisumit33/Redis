@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Registrar.hpp"
 #include "Registry.hpp"
 #include <chrono>
 #include <cstdint>
@@ -8,6 +7,8 @@
 #include <optional>
 #include <unordered_set>
 #include <utility>
+
+class AppContext;
 
 enum class RdbOpcode : uint8_t {
   AUX = 0xFA,
@@ -32,44 +33,48 @@ inline bool isValue(RdbOpcode opcode) {
   return value_opcodes.contains(opcode);
 }
 
+struct RdbParseState {
+  std::optional<std::chrono::system_clock::time_point> expiry = std::nullopt;
+};
+
 class RdbPayloadParser {
 public:
+  RdbPayloadParser() = default;
   virtual ~RdbPayloadParser() = default;
+  RdbPayloadParser(const RdbPayloadParser &) = delete;
+  RdbPayloadParser &operator=(const RdbPayloadParser &) = delete;
+  RdbPayloadParser(RdbPayloadParser &&) = delete;
+  RdbPayloadParser &operator=(RdbPayloadParser &&) = delete;
 
-  virtual void parse(std::istream &is) = 0;
+  virtual void parse(std::istream &in_stream, AppContext &context,
+                     RdbParseState &state) = 0;
 
 protected:
-  std::pair<bool, uint64_t> readSizeEncodedValue(std::istream &is);
+  static std::pair<bool, uint64_t>
+  readSizeEncodedValue(std::istream &in_stream);
 
-  std::string readString(std::istream &is);
+  static std::string readString(std::istream &in_stream);
 };
 
 class RdbHeaderParser : public RdbPayloadParser {
 public:
-  virtual void parse(std::istream &is) override;
+  void parse(std::istream &in_stream, AppContext &context,
+             RdbParseState &state) override;
 };
-
-using RdbParserRegistry = Registry<RdbOpcode, RdbPayloadParser>;
-
-template <typename T>
-using RdbParserRegistrar = Registrar<RdbOpcode, RdbPayloadParser, T>;
 
 class RdbAuxKeyParser : public RdbPayloadParser {
 public:
-  virtual void parse(std::istream &is) override;
-
-private:
-  static RdbParserRegistrar<RdbAuxKeyParser> registrar;
+  void parse(std::istream &in_stream, AppContext &context,
+             RdbParseState &state) override;
 };
 
 class RdbDbParser : public RdbPayloadParser {
 public:
-  virtual void parse(std::istream &is) override;
+  void parse(std::istream &in_stream, AppContext &context,
+             RdbParseState &state) override;
 
 private:
-  static RdbParserRegistrar<RdbDbParser> registrar;
-
-  bool isInlineMetadata(RdbOpcode opcode) {
+  static bool isInlineMetadata(RdbOpcode opcode) {
     static std::unordered_set<RdbOpcode> inline_metadata_opcodes = {
         RdbOpcode::HASHDATA, RdbOpcode::VALUE_EXPIRETIME,
         RdbOpcode::VALUE_EXPIRETIME_MS, RdbOpcode::STRING_VALUE};
@@ -79,50 +84,34 @@ private:
 
 class RdbHashTableParser : public RdbPayloadParser {
 public:
-  virtual void parse(std::istream &is) override;
-
-private:
-  static RdbParserRegistrar<RdbHashTableParser> registrar;
+  void parse(std::istream &in_stream, AppContext &context,
+             RdbParseState &state) override;
 };
 
 class RdbEofParser : public RdbPayloadParser {
 public:
-  virtual void parse(std::istream &is) override;
-
-private:
-  static RdbParserRegistrar<RdbEofParser> registrar;
+  void parse(std::istream &in_stream, AppContext &context,
+             RdbParseState &state) override;
 };
 
-class RdbValueParser : public RdbPayloadParser {
+class RdbStringValueParser : public RdbPayloadParser {
 public:
-  virtual void parseKeyValue(
-      std::istream &is,
-      std::optional<std::chrono::system_clock::time_point> expiry) = 0;
-};
-
-class RdbStringValueParser : public RdbValueParser {
-public:
-  virtual void parse(std::istream &is) override;
-  void parseKeyValue(std::istream &is,
-                     std::optional<std::chrono::system_clock::time_point>
-                         expiry = std::nullopt) override;
-
-private:
-  static RdbParserRegistrar<RdbStringValueParser> registrar;
+  void parse(std::istream &in_stream, AppContext &context,
+             RdbParseState &state) override;
 };
 
 class RdbKeyValueExpMsParser : public RdbPayloadParser {
 public:
-  virtual void parse(std::istream &is) override;
-
-private:
-  static RdbParserRegistrar<RdbKeyValueExpMsParser> registrar;
+  void parse(std::istream &in_stream, AppContext &context,
+             RdbParseState &state) override;
 };
 
 class RdbKeyValueExpSParser : public RdbPayloadParser {
 public:
-  virtual void parse(std::istream &is) override;
-
-private:
-  static RdbParserRegistrar<RdbKeyValueExpSParser> registrar;
+  void parse(std::istream &in_stream, AppContext &context,
+             RdbParseState &state) override;
 };
+
+using RdbParserRegistry = Registry<RdbOpcode, RdbPayloadParser>;
+
+void registerRdbParsers(RdbParserRegistry &registry);

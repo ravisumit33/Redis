@@ -10,27 +10,29 @@ template <typename Key, typename Value> class Registry {
 public:
   using Factory = std::function<std::unique_ptr<Value>()>;
 
-  void add(const Key &k, Factory factory) {
+  Registry() = default;
+  ~Registry() = default;
+
+  Registry(const Registry &) = delete;
+  Registry &operator=(const Registry &) = delete;
+  Registry(Registry &&) = delete;
+  Registry &operator=(Registry &&) = delete;
+
+  void add(const Key &key, Factory factory) {
     std::lock_guard<std::shared_mutex> lock(mMutex);
-    mFactoryMap[k] = factory;
+    mFactoryMap[key] = factory;
   }
 
-  std::unique_ptr<Value> get(const Key &k) {
+  std::unique_ptr<Value> get(const Key &key) {
     std::shared_lock<std::shared_mutex> lock(mMutex);
-    if (!mFactoryMap.contains(k)) {
+    if (!mFactoryMap.contains(key)) {
       return nullptr;
     }
-    auto factory = mFactoryMap[k];
+    auto factory = mFactoryMap[key];
     return factory();
   }
 
-  static Registry &instance() {
-    static Registry registry;
-    return registry;
-  }
-
 private:
-  Registry() = default;
   std::map<Key, Factory> mFactoryMap;
   std::shared_mutex mMutex;
 };

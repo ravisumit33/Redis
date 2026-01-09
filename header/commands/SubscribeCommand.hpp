@@ -4,17 +4,14 @@
 
 class SubscribeCommand : public Command {
 public:
-  SubscribeCommand() : Command(SUBSCRIBE) {}
+  SubscribeCommand() : Command(Type::SUBSCRIBE) {}
+
+protected:
+  std::vector<RespValue> executeOnImpl(const std::vector<RespValue> &args,
+                                       ClientConnection &connection) override;
 
 private:
-  static CommandRegistrar<SubscribeCommand> registrar;
-
-  virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              Connection &connection) override;
-
-  virtual bool validateArgsImpl(
-      const std::vector<std::unique_ptr<RespType>> &args) override {
+  bool validateArgsImpl(const std::vector<RespValue> &args) override {
     return args.size() == 1;
   }
 };

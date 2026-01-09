@@ -1,15 +1,15 @@
 #pragma once
 
-#include "redis_store/values/RedisStoreValue.hpp"
+#include "ExpiryInfo.hpp"
 #include <cstddef>
-#include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
-class SetValue : public RedisStoreValue {
+class SetValue {
 public:
-  SetValue() : RedisStoreValue(SET) {}
+  SetValue() = default;
 
   bool addMember(double score, const std::string &member);
 
@@ -21,17 +21,16 @@ public:
     return m_score_map.at(member);
   }
 
-  std::vector<std::string> getElementsInRange(int start_idx, int end_idx);
+  std::vector<std::string> getElementsInRange(int start_idx, int end_idx) const;
 
-  std::size_t size() const { return m_set.size(); }
+  std::size_t size() const { return m_sorted_set.size(); }
 
   std::size_t erase(const std::string &member);
 
-  virtual std::unique_ptr<RedisStoreValue> clone() const override {
-    return std::make_unique<SetValue>(*this);
-  };
+  const ExpiryInfo &getExpiryInfo() const { return m_expiry_info; }
 
 private:
   std::unordered_map<std::string, double> m_score_map;
-  std::set<std::pair<double, std::string>> m_set;
+  std::set<std::pair<double, std::string>> m_sorted_set;
+  ExpiryInfo m_expiry_info;
 };

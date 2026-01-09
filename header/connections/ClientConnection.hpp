@@ -12,49 +12,54 @@
 
 class ClientConnection : public Connection {
 public:
-  ClientConnection(const unsigned socket_fd, const AppConfig &config)
-      : Connection(Type::CLIENT, socket_fd, config), m_is_slave(false) {}
+  ClientConnection(unsigned socket_fd, AppContext &context)
+      : Connection(Type::CLIENT, socket_fd, context) {}
+
+  ClientConnection(const ClientConnection &) = delete;
+  ClientConnection &operator=(const ClientConnection &) = delete;
+
+  ClientConnection(ClientConnection &&) = delete;
+  ClientConnection &operator=(ClientConnection &&) = delete;
 
   class RedisSubscriber : public RedisChannel::Subscriber {
   public:
     void onMessage(const std::string &msg) override;
 
-    RedisSubscriber(RedisChannel &ch, ClientConnection &con)
-        : m_channel_name(ch.getName()), m_con(con) {}
+    RedisSubscriber(RedisChannel &chn, ClientConnection &con)
+        : m_channel_name(chn.getName()), m_con(con) {}
 
   private:
     std::string m_channel_name;
-    ClientConnection &m_con;
+    const ClientConnection &m_con;
   };
 
-  virtual void handleConnection() override;
+  void handleConnection() override;
 
-  ~ClientConnection();
+  ~ClientConnection() override;
 
   void beginTransaction() {
     m_in_transaction = true;
     m_queued_commands.clear();
   }
 
-  bool isInSubscribedMode() { return m_in_subscribed_mode; }
+  bool isInSubscribedMode() const { return m_in_subscribed_mode; }
 
-  void queueCommand(std::unique_ptr<Command> cmd,
-                    std::vector<std::unique_ptr<RespType>> args) {
+  void queueCommand(std::unique_ptr<Command> cmd, std::vector<RespValue> args) {
     m_queued_commands.emplace_back(std::move(cmd), std::move(args));
   }
 
-  std::unique_ptr<RespType> executeTransaction();
+  RespValue executeTransaction();
 
   void discardTransaction() {
     m_queued_commands.clear();
     m_in_transaction = false;
   }
 
-  bool isInTransaction() { return m_in_transaction == true; }
+  bool isInTransaction() const { return m_in_transaction; }
 
   std::size_t subscribeToChannel(const std::string &channel_name) {
     if (!m_channel_subscriptions.contains(channel_name)) {
-      auto channel = RedisChannelManager::instance().getChannel(channel_name);
+      auto *channel = getContext().getChannelManager().getChannel(channel_name);
       m_channel_subscriptions[channel_name] =
           RedisChannel::Subscriber::create<RedisSubscriber>(*channel, *this);
     }
@@ -63,9 +68,9 @@ public:
   }
 
   std::size_t unsubscribeFromChannel(const std::string &channel_name) {
-    auto it = m_channel_subscriptions.find(channel_name);
-    if (it != m_channel_subscriptions.end()) {
-      m_channel_subscriptions.erase(it);
+    auto itr = m_channel_subscriptions.find(channel_name);
+    if (itr != m_channel_subscriptions.end()) {
+      m_channel_subscriptions.erase(itr);
     }
     auto sub_count = m_channel_subscriptions.size();
     if (sub_count == 0) {
@@ -76,15 +81,19 @@ public:
 
 private:
   void addAsSlave();
+  void processCommand(std::unique_ptr<Command> command,
+                      std::vector<RespValue> args, const std::string &raw_data);
+  void handleSubscribedModeError(const Command &command);
+  void checkAndRegisterSlave(const Command &command,
+                             const std::vector<RespValue> &args);
 
-  bool m_is_slave;
+  bool m_is_slave{};
 
   bool m_in_transaction = false;
 
   bool m_in_subscribed_mode = false;
 
-  std::vector<std::pair<std::unique_ptr<Command>,
-                        std::vector<std::unique_ptr<RespType>>>>
+  std::vector<std::pair<std::unique_ptr<Command>, std::vector<RespValue>>>
       m_queued_commands;
 
   std::unordered_map<std::string, std::shared_ptr<RedisSubscriber>>

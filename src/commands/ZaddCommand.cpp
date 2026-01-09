@@ -1,24 +1,34 @@
 #include "commands/ZaddCommand.hpp"
-#include "Connection.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
-#include "redis_store/RedisStore.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 #include <iostream>
-#include <memory>
 
-CommandRegistrar<ZaddCommand> ZaddCommand::registrar("ZADD");
-
-std::vector<std::unique_ptr<RespType>>
-ZaddCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
-  auto score = std::stod(static_cast<RespBulkString &>(*args.at(1)).getValue());
-  auto member = static_cast<RespBulkString &>(*args.at(2)).getValue();
+std::vector<RespValue>
+ZaddCommand::doExecute(const std::vector<RespValue> &args,
+                       AppContext &context) {
+  std::vector<RespValue> result;
+  auto store_key = getStringValue(args.at(0));
+  auto score = std::stod(getStringValue(args.at(1)));
+  auto member = getStringValue(args.at(2));
 
   auto added_count =
-      RedisStore::instance().addMemberToSet(store_key, score, member);
+      context.getRedisStore().addMemberToSet(store_key, score, member);
   std::cout << "Member: " << member << " with score: " << score
-            << " added to set with key: " << store_key << std::endl;
-  result.push_back(std::make_unique<RespInt>(added_count));
+            << " added to set with key: " << store_key << '\n';
+  result.emplace_back(RespInt(static_cast<int64_t>(added_count)));
   return result;
+}
+
+std::vector<RespValue>
+ZaddCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+ZaddCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

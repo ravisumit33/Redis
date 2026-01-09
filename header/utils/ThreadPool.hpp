@@ -14,8 +14,12 @@ public:
       std::size_t pool_size = std::thread::hardware_concurrency());
 
   ~ThreadPool();
+  ThreadPool(const ThreadPool &) = delete;
+  ThreadPool &operator=(const ThreadPool &) = delete;
+  ThreadPool(ThreadPool &&) = delete;
+  ThreadPool &operator=(ThreadPool &&) = delete;
 
-  bool submit(std::function<void()> f);
+  bool submit(std::function<void()> func);
 
 private:
   std::vector<std::thread> m_workers;

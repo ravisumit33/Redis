@@ -1,19 +1,16 @@
 #include "commands/DiscardCommand.hpp"
-#include "connections/ClientConnection.hpp"
 #include "RespType.hpp"
+#include "connections/ClientConnection.hpp"
 
-CommandRegistrar<DiscardCommand> DiscardCommand::registrar("DISCARD");
-
-std::vector<std::unique_ptr<RespType>>
-DiscardCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                            Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto &client_connection = static_cast<ClientConnection &>(connection);
-  if (!client_connection.isInTransaction()) {
-    result.push_back(std::make_unique<RespError>("DISCARD without MULTI"));
+std::vector<RespValue>
+DiscardCommand::executeOnImpl(const std::vector<RespValue> & /*args*/,
+                              ClientConnection &connection) {
+  std::vector<RespValue> result;
+  if (!connection.isInTransaction()) {
+    result.emplace_back(RespError("DISCARD without MULTI"));
     return result;
   }
-  client_connection.discardTransaction();
-  result.push_back(std::make_unique<RespString>("OK"));
+  connection.discardTransaction();
+  result.emplace_back(RespString("OK"));
   return result;
 }

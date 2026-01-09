@@ -1,26 +1,24 @@
 #include "redis_store/RedisStore.hpp"
-#include "redis_store/values/RedisStoreValue.hpp"
+#include "redis_store/RedisValue.hpp"
 #include <algorithm>
 #include <iterator>
-#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
-std::optional<std::unique_ptr<RedisStoreValue>>
-RedisStore::get(const std::string &key) const {
+std::optional<RedisValue> RedisStore::get(const std::string &key) const {
   auto store = readStore();
-  auto it = store->find(key);
-  if (it == store->end()) {
+  auto itr = store->find(key);
+  if (itr == store->end()) {
     return std::nullopt;
   }
 
-  auto &val = it->second;
-  if (val->hasExpired()) {
+  const auto &val = itr->second;
+  if (hasExpired(val)) {
     return std::nullopt;
   }
 
-  return val->clone();
+  return cloneRedisValue(val);
 }
 
 bool RedisStore::keyExists(const std::string &key) const {

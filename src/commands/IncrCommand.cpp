@@ -1,38 +1,52 @@
 #include "commands/IncrCommand.hpp"
-#include "Connection.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
-#include "redis_store/RedisStore.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 #include "redis_store/values/StringValue.hpp"
 #include <string>
 
-CommandRegistrar<IncrCommand> IncrCommand::registrar("INCR");
+std::vector<RespValue>
+IncrCommand::doExecute(const std::vector<RespValue> &args,
+                       AppContext &context) {
+  std::vector<RespValue> result;
+  auto store_key = getStringValue(args.at(0));
 
-std::vector<std::unique_ptr<RespType>>
-IncrCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
-
-  auto store_val_ptr = RedisStore::instance().get(store_key);
+  auto store_val_ptr = context.getRedisStore().get(store_key);
   if (!store_val_ptr) {
-    RedisStore::instance().setString(store_key, "1");
-    result.push_back(std::make_unique<RespInt>(1));
+    context.getRedisStore().setString(store_key, "1");
+    result.emplace_back(RespInt(1));
     return result;
   }
 
-  auto store_val =
-      static_cast<StringValue &>(*(store_val_ptr.value())).getValue();
-  int64_t int_val;
+  auto *string_val = std::get_if<StringValue>(&store_val_ptr.value());
+  if (string_val == nullptr) {
+    result.emplace_back(RespError("value is not an integer or out of range"));
+    return result;
+  }
+
+  int64_t int_val{};
   try {
-    int_val = std::stoll(store_val);
+    int_val = std::stoll(string_val->getValue());
   } catch (...) {
-    result.push_back(
-        std::make_unique<RespError>("value is not an integer or out of range"));
+    result.emplace_back(RespError("value is not an integer or out of range"));
     return result;
   }
 
   ++int_val;
-  RedisStore::instance().setString(store_key, std::to_string(int_val));
-  result.push_back(std::make_unique<RespInt>(int_val));
+  context.getRedisStore().setString(store_key, std::to_string(int_val));
+  result.emplace_back(RespInt(int_val));
   return result;
+}
+
+std::vector<RespValue>
+IncrCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+IncrCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

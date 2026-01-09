@@ -33,9 +33,9 @@ RedisChannel::subscribe(std::shared_ptr<Subscriber> sub) {
   return sub_token;
 }
 
-void RedisChannel::unsubscribe(SubscriptionTokenId id) {
+void RedisChannel::unsubscribe(SubscriptionTokenId sub_id) {
   std::lock_guard<std::shared_mutex> lock(m_mutex);
-  m_subscribers.erase(id);
+  m_subscribers.erase(sub_id);
 }
 
 std::size_t RedisChannel::publish(const std::string &msg) {
@@ -68,11 +68,11 @@ std::size_t RedisChannel::publish(const std::string &msg) {
             subscriber->onMessage(msg);
           } catch (const std::exception &ex) {
             std::cerr << "Subscriber threw exception while publishing message: "
-                      << ex.what() << std::endl;
+                      << ex.what() << '\n';
           } catch (...) {
             std::cerr
                 << "Subscriber threw unknown exception while publishing message"
-                << std::endl;
+                << '\n';
           }
         }
       }
@@ -83,10 +83,10 @@ std::size_t RedisChannel::publish(const std::string &msg) {
 }
 
 RedisChannel *RedisChannelManager::getChannel(const std::string &channel_name) {
-  auto it = m_channel_map.find(channel_name);
-  if (it != m_channel_map.end()) {
-    return it->second.get();
+  auto itr = m_channel_map.find(channel_name);
+  if (itr != m_channel_map.end()) {
+    return itr->second.get();
   }
-  auto channel_ptr = std::make_shared<RedisChannel>(channel_name);
-  return (m_channel_map[channel_name] = channel_ptr).get();
+  auto channel_ptr = std::make_unique<RedisChannel>(channel_name);
+  return (m_channel_map[channel_name] = std::move(channel_ptr)).get();
 }

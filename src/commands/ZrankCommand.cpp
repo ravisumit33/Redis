@@ -1,22 +1,33 @@
 #include "commands/ZrankCommand.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
-#include "redis_store/RedisStore.hpp"
-#include <memory>
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 
-CommandRegistrar<ZrankCommand> ZrankCommand::registrar("ZRANK");
-
-std::vector<std::unique_ptr<RespType>>
-ZrankCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                          Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
-  auto member = static_cast<RespBulkString &>(*args.at(1)).getValue();
+std::vector<RespValue>
+ZrankCommand::doExecute(const std::vector<RespValue> &args,
+                        AppContext &context) {
+  std::vector<RespValue> result;
+  auto store_key = getStringValue(args.at(0));
+  auto member = getStringValue(args.at(1));
 
   try {
-    auto rank = RedisStore::instance().getSetMemberRank(store_key, member);
-    result.push_back(std::make_unique<RespInt>(rank));
+    auto rank = context.getRedisStore().getSetMemberRank(store_key, member);
+    result.emplace_back(RespInt(rank));
   } catch (...) {
-    result.push_back(std::make_unique<RespBulkString>());
+    result.emplace_back(RespBulkString());
   }
   return result;
+}
+
+std::vector<RespValue>
+ZrankCommand::executeOnImpl(const std::vector<RespValue> &args,
+                            ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+ZrankCommand::executeOnImpl(const std::vector<RespValue> &args,
+                            ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

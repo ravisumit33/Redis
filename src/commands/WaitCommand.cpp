@@ -1,22 +1,34 @@
 #include "commands/WaitCommand.hpp"
-#include "Connection.hpp"
+#include "AppContext.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 
-CommandRegistrar<WaitCommand> WaitCommand::registrar("WAIT");
-
-std::vector<std::unique_ptr<RespType>>
-WaitCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
+std::vector<RespValue>
+WaitCommand::doExecute(const std::vector<RespValue> &args,
+                       AppContext &context) {
+  std::vector<RespValue> result;
+  auto arg1 = getStringValue(args.at(0));
   unsigned expected_slave_count = std::stoul(arg1);
-  auto arg2 = static_cast<RespBulkString &>(*args.at(1)).getValue();
+  auto arg2 = getStringValue(args.at(1));
   unsigned timeout_ms = std::stoul(arg2);
-  auto &master_state = ReplicationManager::getInstance().master();
+  auto &master_state = context.getReplicationManager().master();
   master_state.sendGetAckToSlaves();
   unsigned slave_count =
       master_state.waitForSlaves(expected_slave_count, timeout_ms);
-  result.push_back(std::make_unique<RespInt>(slave_count));
+  result.emplace_back(RespInt(slave_count));
   return result;
+}
+
+std::vector<RespValue>
+WaitCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+WaitCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

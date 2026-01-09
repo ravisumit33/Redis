@@ -1,136 +1,158 @@
 #include "RespTypeParser.hpp"
 #include "RespType.hpp"
 #include <exception>
-#include <iostream>
 #include <istream>
-#include <memory>
 #include <stdexcept>
 #include <string>
 
-RespParserRegistrar<RespStringParser> RespStringParser::registrar('+');
-
-std::unique_ptr<RespType> RespStringParser::parse(std::istream &in) {
+RespString parseRespString(std::istream &in_stream) {
   std::string line;
-  std::getline(in, line);
+  std::getline(in_stream, line);
   if (!line.empty() && line.back() == '\r') {
     line.pop_back();
   } else {
-    throw std::runtime_error("RESP String: Missing \\r terminator in line: '" + line + "'");
+    throw std::runtime_error("RESP String: Missing \\r terminator in line: '" +
+                             line + "'");
   }
-  return std::make_unique<RespString>(line);
+  return RespString(std::move(line));
 }
 
-RespParserRegistrar<RespIntParser> RespIntParser::registrar(':');
-
-std::unique_ptr<RespType> RespIntParser::parse(std::istream &in) {
+RespInt parseRespInt(std::istream &in_stream) {
   std::string line;
-  std::getline(in, line);
+  std::getline(in_stream, line);
   if (!line.empty() && line.back() == '\r') {
     line.pop_back();
   } else {
-    throw std::runtime_error("RESP Integer: Missing \\r terminator in line: '" + line + "'");
+    throw std::runtime_error("RESP Integer: Missing \\r terminator in line: '" +
+                             line + "'");
   }
 
   int64_t val = 0;
   try {
     val = std::stoll(line);
   } catch (const std::exception &e) {
-    throw std::runtime_error("RESP Integer: Cannot parse '" + line + "' as integer: " + e.what());
+    throw std::runtime_error("RESP Integer: Cannot parse '" + line +
+                             "' as integer: " + e.what());
   }
 
-  return std::make_unique<RespInt>(val);
+  return RespInt(val);
 }
 
-RespParserRegistrar<RespBulkStringParser> RespBulkStringParser::registrar('$');
-
-std::unique_ptr<RespType> RespBulkStringParser::parse(std::istream &in) {
+RespBulkString parseRespBulkString(std::istream &in_stream,
+                                   bool parseLastCrlf) {
   std::string line;
-  std::getline(in, line);
+  std::getline(in_stream, line);
   if (!line.empty() && line.back() == '\r') {
     line.pop_back();
   } else {
-    throw std::runtime_error("RESP BulkString: Missing \\r terminator in length line: '" + line + "'");
+    throw std::runtime_error(
+        "RESP BulkString: Missing \\r terminator in length line: '" + line +
+        "'");
   }
 
   size_t len = 0;
   try {
     len = std::stoul(line);
   } catch (const std::exception &e) {
-    throw std::runtime_error("RESP BulkString: Cannot parse length '" + line + "' as unsigned integer: " + e.what());
+    throw std::runtime_error("RESP BulkString: Cannot parse length '" + line +
+                             "' as unsigned integer: " + e.what());
   }
 
   std::string val(len, '\0');
-  in.read(val.data(), len);
-  if (in.gcount() != static_cast<std::streamsize>(len)) {
-    throw std::runtime_error("RESP BulkString: Expected " + std::to_string(len) + " bytes but got " + std::to_string(in.gcount()));
+  in_stream.read(val.data(), static_cast<std::streamsize>(len));
+  if (in_stream.gcount() != static_cast<std::streamsize>(len)) {
+    throw std::runtime_error("RESP BulkString: Expected " +
+                             std::to_string(len) + " bytes but got " +
+                             std::to_string(in_stream.gcount()));
   }
 
-  if (m_parseLastCrlf) {
-    char cr, lf;
-    in.get(cr);
-    in.get(lf);
-    if (cr != '\r' || lf != '\n') {
-      throw std::runtime_error("RESP BulkString: Missing \\r\\n terminator after data (got '" + std::string(1, cr) + std::string(1, lf) + "')");
+  if (parseLastCrlf) {
+    char cr_char{};
+    char lf_char{};
+    in_stream.get(cr_char);
+    in_stream.get(lf_char);
+    if (cr_char != '\r' || lf_char != '\n') {
+      throw std::runtime_error(
+          "RESP BulkString: Missing \\r\\n terminator after data (got '" +
+          std::string(1, cr_char) + std::string(1, lf_char) + "')");
     }
   }
 
-  return std::make_unique<RespBulkString>(std::move(val), m_parseLastCrlf);
+  return RespBulkString(std::move(val), parseLastCrlf);
 }
 
-RespParserRegistrar<RespErrorParser> RespErrorParser::registrar('-');
-
-std::unique_ptr<RespType> RespErrorParser::parse(std::istream &in) {
+RespError parseRespError(std::istream &in_stream) {
   std::string line;
-  std::getline(in, line);
+  std::getline(in_stream, line);
   if (!line.empty() && line.back() == '\r') {
     line.pop_back();
   } else {
-    throw std::runtime_error("RESP Error: Missing \\r terminator in line: '" + line + "'");
+    throw std::runtime_error("RESP Error: Missing \\r terminator in line: '" +
+                             line + "'");
   }
-  return std::make_unique<RespError>(std::move(line));
+  return RespError(std::move(line));
 }
 
-RespParserRegistrar<RespArrayParser> RespArrayParser::registrar('*');
-
-std::unique_ptr<RespType> RespArrayParser::parse(std::istream &in) {
+// NOLINTNEXTLINE(misc-no-recursion)
+RespArray parseRespArray(std::istream &in_stream) {
   std::string line;
-  std::getline(in, line);
+  std::getline(in_stream, line);
 
   if (!line.empty() && line.back() == '\r') {
     line.pop_back();
   } else {
-    throw std::runtime_error("RESP Array: Missing \\r terminator in length line: '" + line + "'");
+    throw std::runtime_error(
+        "RESP Array: Missing \\r terminator in length line: '" + line + "'");
   }
   size_t len = 0;
   try {
     len = std::stoul(line);
   } catch (std::exception &e) {
-    throw std::runtime_error("RESP Array: Cannot parse length '" + line + "' as unsigned integer: " + e.what());
+    throw std::runtime_error("RESP Array: Cannot parse length '" + line +
+                             "' as unsigned integer: " + e.what());
   }
 
   if (len == 0) {
-    throw std::runtime_error("RESP Array: Empty arrays not supported (length=0)");
+    throw std::runtime_error(
+        "RESP Array: Empty arrays not supported (length=0)");
   }
 
-  auto array = std::make_unique<RespArray>();
+  RespArray array;
   for (size_t i = 0; i < len; ++i) {
-    char prefix;
-    in.get(prefix);
-    if (!in) {
-      throw std::runtime_error("RESP Array: Unexpected end of stream at element " + std::to_string(i) + "/" + std::to_string(len));
-    }
-
-    auto parser = RespParserRegistry::instance().get(prefix);
-    if (!parser) {
-      throw std::runtime_error("RESP Array: Unknown RESP type '" + std::string(1, prefix) + "' at element " + std::to_string(i) + "/" + std::to_string(len));
-    }
-    
     try {
-      auto element = parser->parse(in);
-      array->add(std::move(element));
+      auto element = parseRespValue(in_stream);
+      array.add(std::move(element));
     } catch (const std::exception &e) {
-      throw std::runtime_error("RESP Array: Failed to parse element " + std::to_string(i) + "/" + std::to_string(len) + ": " + e.what());
+      throw std::runtime_error("RESP Array: Failed to parse element " +
+                               std::to_string(i) + "/" + std::to_string(len) +
+                               ": " + e.what());
     }
   }
   return array;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+RespValue parseRespValue(std::istream &in_stream) {
+  char prefix{};
+  in_stream.get(prefix);
+  if (!in_stream) {
+    throw std::runtime_error(
+        "RESP Value: Unexpected end of stream (no prefix char)");
+  }
+
+  switch (prefix) {
+  case '+':
+    return parseRespString(in_stream);
+  case ':':
+    return parseRespInt(in_stream);
+  case '$':
+    return parseRespBulkString(in_stream);
+  case '-':
+    return parseRespError(in_stream);
+  case '*':
+    return parseRespArray(in_stream);
+  default:
+    throw std::runtime_error("RESP Value: Unknown RESP type prefix '" +
+                             std::string(1, prefix) + "'");
+  }
 }

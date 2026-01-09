@@ -8,13 +8,14 @@
 ArgParser &ArgParser::addOption(const std::string &name,
                                 const std::string &help,
                                 const std::string &defaultValue) {
-  m_options[name] = {help, defaultValue, std::nullopt};
+  m_options[name] = {
+      .help = help, .defaultValue = defaultValue, .value = std::nullopt};
   return *this;
 }
 
 ArgParser &ArgParser::addFlag(const std::string &name,
                               const std::string &help) {
-  m_flags[name] = {help, false};
+  m_flags[name] = {.help = help, .value = false};
   return *this;
 }
 
@@ -24,12 +25,12 @@ ArgParser &ArgParser::addPositional(const std::string &name,
   return *this;
 }
 
-void ArgParser::parse(int argc, char *argv[]) {
+void ArgParser::parse(std::span<char *> args) {
   size_t posIdx = 0;
   bool shouldParseOptions = true;
 
-  for (int i = 1; i < argc; ++i) {
-    std::string token = argv[i];
+  for (size_t i = 1; i < args.size(); ++i) {
+    std::string token = args[i];
     if (shouldParseOptions && token == "--") {
       shouldParseOptions = false;
       continue;
@@ -41,10 +42,11 @@ void ArgParser::parse(int argc, char *argv[]) {
       if (m_flags.contains(key)) {
         m_flags[key].value = true;
       } else if (m_options.contains(key)) {
-        if (i + 1 >= argc || std::string(argv[i + 1]).starts_with("--")) {
+        if (i + 1 >= args.size() ||
+            std::string(args[i + 1]).starts_with("--")) {
           throw std::runtime_error("Missing value for option: --" + key);
         }
-        m_options[key].value = argv[++i];
+        m_options[key].value = args[++i];
       } else {
         throw std::runtime_error("Unknown option: --" + key);
       }
@@ -65,38 +67,38 @@ void ArgParser::parse(int argc, char *argv[]) {
 
 void ArgParser::printHelp(const std::string &progName) const {
   std::cout << "Usage: " << progName;
-  for (const auto &[name, _] : m_options) {
+  for (const auto &[name, opt] : m_options) {
     std::cout << " [--" << name << " <val>]";
   }
-  for (const auto &[name, _] : m_flags) {
+  for (const auto &[name, flag] : m_flags) {
     std::cout << " [--" << name << "]";
   }
-  for (const auto &p : m_positionals) {
-    std::cout << " <" << p.name << ">";
+  for (const auto &pos : m_positionals) {
+    std::cout << " <" << pos.name << ">";
   }
-  std::cout << std::endl;
-  std::cout << "\n" << m_description << std::endl;
+  std::cout << '\n';
+  std::cout << "\n" << m_description << '\n';
 
   if (!m_options.empty()) {
-    std::cout << "\nOptions:" << std::endl;
+    std::cout << "\nOptions:" << '\n';
     for (const auto &[name, opt] : m_options) {
       std::cout << " --" << name << "\t" << opt.help
                 << " (default: " << opt.defaultValue << ")";
-      std::cout << std::endl;
+      std::cout << '\n';
     }
   }
 
   if (!m_flags.empty()) {
-    std::cout << "\nFlags: " << std::endl;
+    std::cout << "\nFlags: " << '\n';
     for (const auto &[name, flag] : m_flags) {
-      std::cout << " --" << name << "\t" << flag.help << std::endl;
+      std::cout << " --" << name << "\t" << flag.help << '\n';
     }
   }
 
   if (!m_positionals.empty()) {
-    std::cout << "\nPositionals: " << std::endl;
-    for (const auto &p : m_positionals) {
-      std::cout << " " << p.name << "\t" << p.help << std::endl;
+    std::cout << "\nPositionals: " << '\n';
+    for (const auto &pos : m_positionals) {
+      std::cout << " " << pos.name << "\t" << pos.help << '\n';
     }
   }
 }

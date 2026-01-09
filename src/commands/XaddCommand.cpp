@@ -1,36 +1,48 @@
 #include "commands/XaddCommand.hpp"
-#include "Connection.hpp"
-#include "redis_store/RedisStore.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
+#include "redis_store/values/StreamValue.hpp"
 #include <exception>
 #include <string>
 
-CommandRegistrar<XaddCommand> XaddCommand::registrar("XADD");
-
-std::vector<std::unique_ptr<RespType>>
-XaddCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
-  auto stream_entry_id = static_cast<RespBulkString &>(*args.at(1)).getValue();
+std::vector<RespValue>
+XaddCommand::doExecute(const std::vector<RespValue> &args,
+                       AppContext &context) {
+  std::vector<RespValue> result;
+  auto store_key = getStringValue(args.at(0));
+  auto stream_entry_id = getStringValue(args.at(1));
 
   StreamValue::StreamEntry stream_entry;
   std::size_t nargs = args.size();
-  for (int i = 2; i < nargs; i += 2) {
-    auto entry_key = static_cast<RespBulkString &>(*args.at(i)).getValue();
-    auto entry_val = static_cast<RespBulkString &>(*args.at(i + 1)).getValue();
+  for (size_t i = 2; i < nargs; i += 2) {
+    auto entry_key = getStringValue(args.at(i));
+    auto entry_val = getStringValue(args.at(i + 1));
     stream_entry[entry_key] = entry_val;
   }
 
   try {
-    auto saved_entry_id = RedisStore::instance().addStreamEntry(
+    auto saved_entry_id = context.getRedisStore().addStreamEntry(
         store_key, stream_entry_id, std::move(stream_entry));
-    result.push_back(std::make_unique<RespBulkString>(
-        std::to_string(saved_entry_id.at(0)) + "-" +
-        std::to_string(saved_entry_id.at(1))));
+    result.emplace_back(RespBulkString(std::to_string(saved_entry_id.at(0)) +
+                                       "-" +
+                                       std::to_string(saved_entry_id.at(1))));
     return result;
   } catch (const std::exception &ex) {
-    result.push_back(std::make_unique<RespError>(ex.what()));
+    result.emplace_back(RespError(ex.what()));
     return result;
   }
+}
+
+std::vector<RespValue>
+XaddCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+XaddCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

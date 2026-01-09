@@ -1,44 +1,44 @@
 #pragma once
 
-#include "redis_store/values/RedisStoreValue.hpp"
+#include "ExpiryInfo.hpp"
 #include <array>
 #include <cstdint>
 #include <map>
-#include <memory>
+#include <string>
 #include <unordered_map>
 
-class StreamValue : public RedisStoreValue {
+class StreamValue {
 public:
   using StreamEntry = std::unordered_map<std::string, std::string>;
   using StreamEntryId = std::array<uint64_t, 2>;
-  using StreamIterator = std::map<StreamEntryId, StreamEntry>::const_iterator;
+  using StreamMap = std::map<StreamEntryId, StreamEntry>;
+  using StreamIterator = StreamMap::const_iterator;
 
-  virtual std::unique_ptr<RedisStoreValue> clone() const override {
-    return std::make_unique<StreamValue>(*this);
-  };
+  StreamValue() = default;
 
-  StreamIterator begin() const { return mStreams.begin(); }
+  StreamIterator begin() const { return m_streams.begin(); }
 
-  StreamIterator end() const { return mStreams.end(); }
+  StreamIterator end() const { return m_streams.end(); }
 
-  bool empty() const { return mStreams.empty(); }
-
-  StreamValue() : RedisStoreValue(STREAM) {}
+  bool empty() const { return m_streams.empty(); }
 
   void addEntry(const StreamEntryId &stream_id, StreamEntry stream_entry) {
-    mStreams[stream_id].merge(stream_entry);
+    m_streams[stream_id].merge(stream_entry);
   }
 
   StreamEntryId getTopEntry() const;
 
   StreamIterator lowerBound(const StreamEntryId &entry_id) const {
-    return mStreams.lower_bound(entry_id);
+    return m_streams.lower_bound(entry_id);
   }
 
   StreamIterator upperBound(const StreamEntryId &entry_id) const {
-    return mStreams.upper_bound(entry_id);
+    return m_streams.upper_bound(entry_id);
   }
 
+  const ExpiryInfo &getExpiryInfo() const { return m_expiry_info; }
+
 private:
-  std::map<StreamEntryId, StreamEntry> mStreams;
+  StreamMap m_streams;
+  ExpiryInfo m_expiry_info;
 };

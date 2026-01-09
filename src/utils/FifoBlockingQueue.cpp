@@ -6,7 +6,7 @@ FifoBlockingQueue::WaitToken::WaitToken(FifoBlockingQueue &queue)
     : m_queue(&queue) {}
 
 FifoBlockingQueue::WaitToken::~WaitToken() {
-  if (m_queue) {
+  if (m_queue != nullptr) {
     m_queue->remove_wait_token(this);
   }
 }
@@ -41,16 +41,16 @@ std::size_t FifoBlockingQueue::waiting_count() const {
 
 void FifoBlockingQueue::remove_wait_token(WaitToken *token) {
   std::lock_guard<std::mutex> lock(m_queue_mutex);
-  auto it = std::find(m_waiting_list.begin(), m_waiting_list.end(), token);
-  if (it != m_waiting_list.end()) {
-    m_waiting_list.erase(it);
+  auto itr = std::ranges::find(m_waiting_list, token);
+  if (itr != m_waiting_list.end()) {
+    m_waiting_list.erase(itr);
   }
   token->m_queue = nullptr;
 }
 
 FifoBlockingQueue::~FifoBlockingQueue() {
   std::lock_guard<std::mutex> lock(m_queue_mutex);
-  for (auto token : m_waiting_list) {
+  for (auto *token : m_waiting_list) {
     (*token).m_queue = nullptr;
   }
 }

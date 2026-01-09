@@ -12,9 +12,8 @@
 
 class MasterState {
 public:
-  MasterState() = default;
-  MasterState(const std::string &replid, const uint64_t repl_offset = 0)
-      : m_replid(replid), m_repl_offset(repl_offset) {}
+  MasterState(std::string replid, const uint64_t repl_offset = 0)
+      : m_replid(std::move(replid)), m_repl_offset(repl_offset) {}
 
   std::string getReplId() const { return m_replid; }
 
@@ -22,8 +21,7 @@ public:
 
   void updateReplOffset(uint64_t delta) {
     m_repl_offset += delta;
-    std::cout << "Master repl_offset updated to: " << m_repl_offset
-              << std::endl;
+    std::cout << "Master repl_offset updated to: " << m_repl_offset << '\n';
   }
 
   bool hasSlaves() const {
@@ -62,36 +60,29 @@ private:
   std::unordered_map<unsigned, uint64_t> m_slaves;
   mutable std::mutex m_mutex;
   std::condition_variable m_cv;
-
-  MasterState(const MasterState &state) = delete;
-
-  MasterState &operator=(const MasterState &) = delete;
 };
 
 class SlaveState {
 public:
-  SlaveState() = default;
-
   void addBytesProcessed(std::size_t bytes) { m_bytes_processed += bytes; }
 
   std::size_t getBytesProcessed() const { return m_bytes_processed; }
 
 private:
   std::size_t m_bytes_processed = 0;
-
-  SlaveState(const SlaveState &state) = delete;
-
-  SlaveState &operator=(const SlaveState &) = delete;
 };
 
 class ReplicationManager {
 public:
-  enum class Role { None, Master, Slave };
+  enum class Role : std::uint8_t { None, Master, Slave };
 
-  static ReplicationManager &getInstance() {
-    static ReplicationManager instance;
-    return instance;
-  }
+  ReplicationManager() = default;
+  ~ReplicationManager() = default;
+
+  ReplicationManager(const ReplicationManager &) = delete;
+  ReplicationManager &operator=(const ReplicationManager &) = delete;
+  ReplicationManager(ReplicationManager &&) = delete;
+  ReplicationManager &operator=(ReplicationManager &&) = delete;
 
   void initAsMaster();
   void initAsSlave();
@@ -106,8 +97,4 @@ private:
   bool m_initialized = false;
   std::variant<std::shared_ptr<MasterState>, std::shared_ptr<SlaveState>>
       m_state;
-
-  ReplicationManager() = default;
-  ReplicationManager(const ReplicationManager &) = delete;
-  ReplicationManager &operator=(const ReplicationManager &) = delete;
 };

@@ -1,26 +1,25 @@
 #pragma once
 
-#include "redis_store/values/RedisStoreValue.hpp"
+#include "ExpiryInfo.hpp"
 #include <cstddef>
 #include <deque>
-#include <memory>
 #include <string>
 #include <vector>
 
-class ListValue : public RedisStoreValue {
+class ListValue {
 public:
-  ListValue() : RedisStoreValue(LIST) {}
+  ListValue() = default;
 
-  ListValue(const std::vector<std::string> &elements)
-      : RedisStoreValue(LIST), m_elements(elements.begin(), elements.end()) {}
+  explicit ListValue(const std::vector<std::string> &vec)
+      : m_elements(vec.begin(), vec.end()) {}
 
-  ListValue &insertAtBegin(const std::vector<std::string> &v) {
-    m_elements.insert(m_elements.begin(), v.begin(), v.end());
+  ListValue &insertAtBegin(const std::vector<std::string> &vec) {
+    m_elements.insert(m_elements.begin(), vec.begin(), vec.end());
     return *this;
   }
 
-  ListValue &insertAtEnd(const std::vector<std::string> &v) {
-    m_elements.insert(m_elements.end(), v.begin(), v.end());
+  ListValue &insertAtEnd(const std::vector<std::string> &vec) {
+    m_elements.insert(m_elements.end(), vec.begin(), vec.end());
     return *this;
   }
 
@@ -34,12 +33,11 @@ public:
     return front_el;
   }
 
-  std::vector<std::string> getElementsInRange(int start_idx, int end_idx);
+  std::vector<std::string> getElementsInRange(int start_idx, int end_idx) const;
 
-  virtual std::unique_ptr<RedisStoreValue> clone() const override {
-    return std::make_unique<ListValue>(*this);
-  };
+  const ExpiryInfo &getExpiryInfo() const { return m_expiry_info; }
 
 private:
   std::deque<std::string> m_elements;
+  ExpiryInfo m_expiry_info;
 };

@@ -9,8 +9,9 @@ ThreadPool::ThreadPool(std::size_t pool_size) {
         {
           std::unique_lock<std::mutex> lock(m_mutex);
           m_cv.wait(lock, [this] { return m_stop || !m_tasks.empty(); });
-          if (m_stop)
+          if (m_stop) {
             return;
+          }
           task = std::move(m_tasks.front());
           m_tasks.pop();
         }
@@ -30,18 +31,20 @@ ThreadPool::~ThreadPool() {
     m_stop = true;
   }
   m_cv.notify_all();
-  for (auto &t : m_workers)
-    if (t.joinable())
-      t.join();
+  for (auto &thread : m_workers) {
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
 }
 
-bool ThreadPool::submit(std::function<void()> f) {
+bool ThreadPool::submit(std::function<void()> func) {
   {
     std::unique_lock<std::mutex> lock(m_mutex);
     if (m_stop) {
       return false;
     }
-    m_tasks.push(std::move(f));
+    m_tasks.push(std::move(func));
   }
   m_cv.notify_one();
   return true;

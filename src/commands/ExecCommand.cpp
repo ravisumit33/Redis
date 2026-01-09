@@ -1,18 +1,15 @@
 #include "commands/ExecCommand.hpp"
-#include "connections/ClientConnection.hpp"
 #include "RespType.hpp"
+#include "connections/ClientConnection.hpp"
 
-CommandRegistrar<ExecCommand> ExecCommand::registrar("EXEC");
-
-std::vector<std::unique_ptr<RespType>>
-ExecCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto &client_connection = static_cast<ClientConnection &>(connection);
-  if (!client_connection.isInTransaction()) {
-    result.push_back(std::make_unique<RespError>("EXEC without MULTI"));
+std::vector<RespValue>
+ExecCommand::executeOnImpl(const std::vector<RespValue> & /*args*/,
+                           ClientConnection &connection) {
+  std::vector<RespValue> result;
+  if (!connection.isInTransaction()) {
+    result.emplace_back(RespError("EXEC without MULTI"));
     return result;
   }
-  result.push_back(client_connection.executeTransaction());
+  result.emplace_back(connection.executeTransaction());
   return result;
 }

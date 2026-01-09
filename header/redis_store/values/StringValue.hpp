@@ -1,22 +1,24 @@
 #pragma once
 
-#include "redis_store/values/RedisStoreValue.hpp"
-#include <memory>
+#include "ExpiryInfo.hpp"
+#include <chrono>
 #include <optional>
 #include <string>
 
-class StringValue : public RedisStoreValue {
+class StringValue {
 public:
-  StringValue(const std::string &val,
-              std::optional<std::chrono::system_clock::time_point> exp)
-      : RedisStoreValue(STRING, exp), mValue(val) {}
+  StringValue() = default;
 
-  std::string getValue() const { return mValue; }
+  StringValue(
+      std::string val,
+      std::optional<std::chrono::system_clock::time_point> exp = std::nullopt)
+      : m_value(std::move(val)), m_expiry_info(exp) {}
 
-  virtual std::unique_ptr<RedisStoreValue> clone() const override {
-    return std::make_unique<StringValue>(*this);
-  };
+  const std::string &getValue() const { return m_value; }
+
+  const ExpiryInfo &getExpiryInfo() const { return m_expiry_info; }
 
 private:
-  std::string mValue;
+  std::string m_value;
+  ExpiryInfo m_expiry_info;
 };

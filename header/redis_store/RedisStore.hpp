@@ -1,11 +1,12 @@
 #pragma once
 
-#include "redis_store/values/RedisStoreValue.hpp"
-#include "redis_store/values/StreamValue.hpp"
+#include "redis_store/RedisValue.hpp"
 #include "utils/FifoBlockingQueue.hpp"
+#include <array>
+#include <cassert>
 #include <chrono>
 #include <cstdint>
-#include <memory>
+#include <functional>
 #include <optional>
 #include <shared_mutex>
 #include <string>
@@ -32,8 +33,7 @@ public:
                                             const std::string &entry_id,
                                             StreamValue::StreamEntry entry);
 
-  std::optional<std::unique_ptr<RedisStoreValue>>
-  get(const std::string &key) const;
+  std::optional<RedisValue> get(const std::string &key) const;
 
   bool keyExists(const std::string &key) const;
 
@@ -55,21 +55,24 @@ public:
                              const std::string &member);
 
   unsigned int getSetMemberRank(const std::string &key,
-                                const std::string &member);
+                                const std::string &member) const;
 
   std::size_t removeMemberFromSet(const std::string &key,
                                   const std::string &member);
 
-  static RedisStore &instance() {
-    static RedisStore instance;
-    return instance;
-  }
-
   std::vector<std::string> getKeys() const;
 
-private:
   RedisStore() = default;
-  std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>> m_store;
+  ~RedisStore() = default;
+
+  RedisStore(const RedisStore &) = delete;
+  RedisStore &operator=(const RedisStore &) = delete;
+  RedisStore(RedisStore &&) = delete;
+  RedisStore &operator=(RedisStore &&) = delete;
+
+private:
+  using StoreType = std::unordered_map<std::string, RedisValue>;
+  StoreType m_store;
   mutable std::shared_mutex m_mutex;
 
   mutable std::unordered_map<std::string, FifoBlockingQueue> m_blocking_queues;
@@ -77,33 +80,53 @@ private:
 
   void notifyBlockingClients(const std::string &key) const;
 
+  bool waitForListElements(const std::string &key, unsigned int &count,
+                           double timeout_s,
+                           const std::function<void()> &pop_elements) const;
+
+  static StreamValue::StreamEntryId
+  computeEntryIdForExistingStream(StreamValue &stream,
+                                  std::optional<uint64_t> timestamp,
+                                  std::optional<uint64_t> sequence);
+
+  using StreamEntriesMap =
+      std::unordered_map<std::string,
+                         std::vector<std::pair<StreamValue::StreamEntryId,
+                                               StreamValue::StreamEntry>>>;
+
+  void
+  fillStreamEntries(const std::vector<std::string> &store_keys,
+                    const std::vector<std::array<uint64_t, 2>> &base_start_ids,
+                    StreamEntriesMap &result) const;
+
+  bool waitForStreamEntries(const std::vector<std::string> &store_keys,
+                            uint64_t timeout_ms,
+                            const std::function<void()> &fill_entries,
+                            const std::function<bool()> &has_entries) const;
+
   class StoreReadGuard {
   public:
     explicit StoreReadGuard(const RedisStore &store)
-        : m_store(store.m_store), m_lock(store.m_mutex) {}
+        : m_store_ptr(&store.m_store), m_lock(store.m_mutex) {}
 
-    const auto &operator*() const { return m_store; }
-    const auto *operator->() const { return &m_store; }
+    const auto &operator*() const { return *m_store_ptr; }
+    const auto *operator->() const { return m_store_ptr; }
 
   private:
-    const std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>>
-        &m_store;
+    const StoreType *m_store_ptr;
     std::shared_lock<std::shared_mutex> m_lock;
   };
 
   class StoreWriteGuard {
   public:
-    explicit StoreWriteGuard(const RedisStore &store)
-        : m_store(const_cast<std::unordered_map<
-                      std::string, std::unique_ptr<RedisStoreValue>> &>(
-              store.m_store)),
-          m_lock(store.m_mutex) {}
+    explicit StoreWriteGuard(RedisStore &store)
+        : m_store_ptr(&store.m_store), m_lock(store.m_mutex) {}
 
-    auto &operator*() { return m_store; }
-    auto *operator->() { return &m_store; }
+    auto &operator*() { return *m_store_ptr; }
+    auto *operator->() { return m_store_ptr; }
 
   private:
-    std::unordered_map<std::string, std::unique_ptr<RedisStoreValue>> &m_store;
+    StoreType *m_store_ptr;
     std::unique_lock<std::shared_mutex> m_lock;
   };
 
@@ -111,37 +134,38 @@ private:
   public:
     explicit BlockingQueueGuard(const std::string &key,
                                 const RedisStore &store) {
-      m_read_lock =
-          std::shared_lock<std::shared_mutex>(store.m_blocking_queues_mutex);
-      auto it = store.m_blocking_queues.find(key);
-      if (it != store.m_blocking_queues.end()) {
-        m_queue_ptr = &(it->second);
-        return;
+      {
+        auto m_read_lock =
+            std::shared_lock<std::shared_mutex>(store.m_blocking_queues_mutex);
+        auto iter = store.m_blocking_queues.find(key);
+        if (iter != store.m_blocking_queues.end()) {
+          m_queue_ptr = &(iter->second);
+          return;
+        }
       }
-      m_read_lock.unlock();
 
-      m_write_lock =
-          std::unique_lock<std::shared_mutex>(store.m_blocking_queues_mutex);
-      it = store.m_blocking_queues.find(key);
-      if (it == store.m_blocking_queues.end()) {
-        auto [it, _] = store.m_blocking_queues.try_emplace(key);
-        m_queue_ptr = &(it->second);
+      {
+        auto m_write_lock =
+            std::unique_lock<std::shared_mutex>(store.m_blocking_queues_mutex);
+        auto [inserted_iter, inserted] =
+            store.m_blocking_queues.try_emplace(key);
+        m_queue_ptr = &(inserted_iter->second);
       }
+
+      assert(m_queue_ptr != nullptr);
     }
 
     auto &operator*() { return *m_queue_ptr; }
     auto *operator->() { return m_queue_ptr; }
 
   private:
-    FifoBlockingQueue *m_queue_ptr;
-    std::shared_lock<std::shared_mutex> m_read_lock;
-    std::unique_lock<std::shared_mutex> m_write_lock;
+    FifoBlockingQueue *m_queue_ptr = nullptr;
   };
 
 public:
   StoreReadGuard readStore() const { return StoreReadGuard(*this); }
 
-  StoreWriteGuard writeStore() const { return StoreWriteGuard(*this); }
+  StoreWriteGuard writeStore() { return StoreWriteGuard(*this); }
 
   BlockingQueueGuard getBlockingQueue(const std::string &key) const {
     return BlockingQueueGuard(key, *this);

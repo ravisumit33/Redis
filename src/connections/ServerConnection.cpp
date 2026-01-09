@@ -1,4 +1,5 @@
 #include "connections/ServerConnection.hpp"
+#include "AppContext.hpp"
 #include "Command.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
@@ -8,7 +9,6 @@
 #include <functional>
 #include <iostream>
 #include <istream>
-#include <memory>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -16,23 +16,22 @@
 #include <utility>
 #include <vector>
 
-void ServerConnection::sendCommand(
-    std::vector<std::unique_ptr<RespType>> args) {
-  auto array = std::make_unique<RespArray>();
-  for (auto &resp_type_ptr : args) {
-    array->add(std::move(resp_type_ptr));
+void ServerConnection::sendCommand(std::vector<RespValue> args) {
+  RespArray array;
+  for (auto &resp_val : args) {
+    array.add(std::move(resp_val));
   }
-  writeToSocket(getSocketFd(), array->serialize());
+  writeToSocket(getSocketFd(), array.serialize());
 }
 
 void ServerConnection::validateResponse(auto validate) {
   auto servResponse = readFromSocket(getSocketFd());
   std::cout << "Received: " << servResponse << " from master: " << getSocketFd()
-            << std::endl;
-  std::istringstream in(servResponse);
-  char type;
-  in.get(type);
-  if (!in) {
+            << '\n';
+  std::istringstream in_stream(servResponse);
+  char type{};
+  in_stream.get(type);
+  if (!in_stream) {
     throw std::runtime_error("No response RESP type");
   }
 
@@ -42,99 +41,120 @@ void ServerConnection::validateResponse(auto validate) {
         std::string(1, type) + "'");
   }
 
-  auto parser = RespParserRegistry::instance().get(type);
-  if (!parser) {
-    throw std::runtime_error(
-        "Replication handshake: No parser found for response type '" +
-        std::string(1, type) + "'");
-  }
-  auto parsed_response = parser->parse(in);
-  RespString &response = static_cast<RespString &>(*parsed_response);
-  validate(response.getValue(), in);
+  RespString response = parseRespString(in_stream);
+  validate(response.getValue(), in_stream);
 }
 
 void ServerConnection::configureRepl() {
-  std::vector<std::unique_ptr<RespType>> cmd;
-  cmd.push_back(std::make_unique<RespBulkString>("REPLCONF"));
-  cmd.push_back(std::make_unique<RespBulkString>("listening-port"));
-  cmd.push_back(
-      std::make_unique<RespBulkString>(std::to_string(getConfig().getPort())));
+  std::vector<RespValue> cmd;
+  cmd.emplace_back(RespBulkString("REPLCONF"));
+  cmd.emplace_back(RespBulkString("listening-port"));
+  cmd.emplace_back(
+      RespBulkString(std::to_string(getContext().getConfig().getPort())));
   sendCommand(std::move(cmd));
-  validateResponse([](const std::string &response, std::istringstream &in) {
-    if (response != "OK") {
-      std::cerr << "REPLCONF listening-port: Expected 'OK' but got '"
-                << response << "'" << std::endl;
-      throw std::runtime_error("REPLCONF listening-port failed: got '" +
-                               response + "' instead of 'OK'");
-    }
-  });
+  validateResponse(
+      [](const std::string &response, std::istringstream & /*in_stream*/) {
+        if (response != "OK") {
+          std::cerr << "REPLCONF listening-port: Expected 'OK' but got '"
+                    << response << "'" << '\n';
+          throw std::runtime_error("REPLCONF listening-port failed: got '" +
+                                   response + "' instead of 'OK'");
+        }
+      });
 
   cmd.clear();
-  cmd.push_back(std::make_unique<RespBulkString>("REPLCONF"));
-  cmd.push_back(std::make_unique<RespBulkString>("capa"));
-  cmd.push_back(std::make_unique<RespBulkString>("psync2"));
+  cmd.emplace_back(RespBulkString("REPLCONF"));
+  cmd.emplace_back(RespBulkString("capa"));
+  cmd.emplace_back(RespBulkString("psync2"));
   sendCommand(std::move(cmd));
-  validateResponse([](const std::string &response, std::istringstream &in) {
-    if (response != "OK") {
-      std::cerr << "REPLCONF capa: Expected 'OK' but got '" << response << "'"
-                << std::endl;
-      throw std::runtime_error("REPLCONF capa failed: got '" + response +
-                               "' instead of 'OK'");
+  validateResponse(
+      [](const std::string &response, std::istringstream & /*in*/) {
+        if (response != "OK") {
+          std::cerr << "REPLCONF capa: Expected 'OK' but got '" << response
+                    << "'" << '\n';
+          throw std::runtime_error("REPLCONF capa failed: got '" + response +
+                                   "' instead of 'OK'");
+        }
+      });
+}
+
+void ServerConnection::processBacklogCommands(
+    std::istringstream &input_stream) {
+  std::streampos pos = input_stream.tellg();
+  std::size_t total_bytes_after_handshake =
+      (pos != -1) ? (input_stream.str().size() - static_cast<std::size_t>(pos))
+                  : 0;
+  std::size_t bytes_recorded = 0;
+
+  while (input_stream.peek() != std::char_traits<char>::eof()) {
+    auto [command, args] = parseCommand(input_stream, getContext());
+    auto responses = command->execute(args, *this);
+    std::string resp;
+    for (const auto &response : responses) {
+      resp += response.serialize();
     }
-  });
+    if (command->getType() == Command::Type::REPLCONF) {
+      writeToSocket(getSocketFd(), resp);
+    }
+    std::streampos cur_pos = input_stream.tellg();
+    std::size_t bytes_remaining =
+        (cur_pos != -1)
+            ? (input_stream.str().size() - static_cast<std::size_t>(cur_pos))
+            : 0;
+    std::size_t bytes_read = total_bytes_after_handshake - bytes_remaining;
+    std::size_t new_bytes_read = bytes_read - bytes_recorded;
+    auto &slave_state = getContext().getReplicationManager().slave();
+    slave_state.addBytesProcessed(new_bytes_read);
+    bytes_recorded += new_bytes_read;
+  }
+  std::cout << "Backlog commands executed" << '\n';
 }
 
 void ServerConnection::configurePsync() {
-  std::vector<std::unique_ptr<RespType>> cmd;
-  cmd.push_back(std::make_unique<RespBulkString>("PSYNC"));
-  cmd.push_back(std::make_unique<RespBulkString>("?"));
-  cmd.push_back(std::make_unique<RespBulkString>("-1"));
+  std::vector<RespValue> cmd;
+  cmd.emplace_back(RespBulkString("PSYNC"));
+  cmd.emplace_back(RespBulkString("?"));
+  cmd.emplace_back(RespBulkString("-1"));
   sendCommand(std::move(cmd));
-  validateResponse([this](const std::string &response, std::istringstream &in) {
+  validateResponse([this](const std::string &response,
+                          std::istringstream &in_stream) {
     std::istringstream stream(response);
     stream.exceptions(std::ios::badbit);
-    std::string cmd, repl_id;
-    unsigned repl_offset;
-    stream >> cmd >> repl_id >> repl_offset;
-    if (cmd != "FULLRESYNC") {
+    std::string psync_cmd;
+    std::string repl_id;
+    unsigned repl_offset = 0;
+    stream >> psync_cmd >> repl_id >> repl_offset;
+    if (psync_cmd != "FULLRESYNC") {
       std::cerr << "PSYNC: Expected 'FULLRESYNC' but got '" << response << "'"
-                << std::endl;
+                << '\n';
       throw std::runtime_error("PSYNC failed: expected 'FULLRESYNC' but got '" +
                                response + "'");
     }
-    std::cout << "FULLRESYNC recieved" << std::endl;
+    std::cout << "FULLRESYNC recieved" << '\n';
 
     auto extractRDB = [this](std::istream &ins) -> bool {
-      char type;
+      char type = 0;
       ins.get(type);
       if (!ins || type != '$') {
         return false;
       }
-      auto parser = RespParserRegistry::instance().get(type);
-      if (!parser) {
-        return false;
-      }
-      auto bulk_string_parser = static_cast<RespBulkStringParser &>(*parser);
-      bulk_string_parser.disableLastCrlfParsing();
-      auto parsed_rdb_ptr = bulk_string_parser.parse(ins); // TODO: Store RDB
-      auto rdb_bulk_string =
-          static_cast<RespBulkString &>(*parsed_rdb_ptr.get());
+      RespBulkString rdb_bulk_string = parseRespBulkString(ins, false);
       std::cout << "Received RDB file from master [fd=" << getSocketFd() << "]"
-                << std::endl;
+                << '\n';
       return true;
     };
 
-    std::reference_wrapper<std::istringstream> input_stream_ref = in;
+    std::reference_wrapper<std::istringstream> input_stream_ref = in_stream;
     std::optional<std::istringstream> next_server_response;
 
-    if (in.peek() != std::char_traits<char>::eof()) {
-      if (!extractRDB(in)) {
+    if (in_stream.peek() != std::char_traits<char>::eof()) {
+      if (!extractRDB(in_stream)) {
         throw std::runtime_error("Unexpected RDB file");
       }
     } else {
       std::string servResponse = readFromSocket(getSocketFd());
       std::cout << "Received: " << servResponse
-                << " from master [fd=" << getSocketFd() << "]" << std::endl;
+                << " from master [fd=" << getSocketFd() << "]" << '\n';
       next_server_response.emplace(servResponse);
       if (!extractRDB(*next_server_response)) {
         throw std::runtime_error("Unexpected RDB file");
@@ -142,101 +162,75 @@ void ServerConnection::configurePsync() {
       input_stream_ref = *next_server_response;
     }
 
-    auto &input_stream = input_stream_ref.get();
-    std::streampos pos = input_stream.tellg();
-    std::size_t total_bytes_after_handshake =
-        (pos != -1)
-            ? (input_stream.str().size() - static_cast<std::size_t>(pos))
-            : 0;
-    std::size_t bytes_recorded = 0;
-    while (input_stream.peek() != std::char_traits<char>::eof()) {
-      auto [command, args] = parseCommand(input_stream);
-      auto responses = command->execute(args, *this);
-      std::string resp;
-      for (const auto &response : responses) {
-        resp += response->serialize();
-      }
-      if (command->getType() == Command::REPLCONF) {
-        writeToSocket(getSocketFd(), resp);
-      }
-      std::streampos pos = input_stream.tellg();
-      std::size_t bytes_remaining =
-          (pos != -1)
-              ? (input_stream.str().size() - static_cast<std::size_t>(pos))
-              : 0;
-      std::size_t bytes_read = total_bytes_after_handshake - bytes_remaining;
-      std::size_t new_bytes_read = bytes_read - bytes_recorded;
-      auto &slave_state = ReplicationManager::getInstance().slave();
-      slave_state.addBytesProcessed(new_bytes_read);
-      bytes_recorded += new_bytes_read;
-    }
-
-    std::cout << "Backlog commands executed" << std::endl;
+    processBacklogCommands(input_stream_ref.get());
   });
 }
 
 void ServerConnection::handShake() {
-  std::vector<std::unique_ptr<RespType>> cmd;
-  cmd.push_back(std::make_unique<RespBulkString>("PING"));
+  std::vector<RespValue> cmd;
+  cmd.emplace_back(RespBulkString("PING"));
   sendCommand(std::move(cmd));
-  validateResponse([](const std::string &response, std::istringstream &in) {
-    if (response != "PONG") {
-      std::cerr << "PING handshake: Expected 'PONG' but got '" << response
-                << "'" << std::endl;
-      throw std::runtime_error("PING handshake failed: got '" + response +
-                               "' instead of 'PONG'");
-    }
-  });
-  std::cout << "PING complete" << std::endl;
+  validateResponse(
+      [](const std::string &response, std::istringstream & /*in_stream*/) {
+        if (response != "PONG") {
+          std::cerr << "PING handshake: Expected 'PONG' but got '" << response
+                    << "'" << '\n';
+          throw std::runtime_error("PING handshake failed: got '" + response +
+                                   "' instead of 'PONG'");
+        }
+      });
+  std::cout << "PING complete" << '\n';
 
   configureRepl();
-  std::cout << "Repl configured" << std::endl;
+  std::cout << "Repl configured" << '\n';
 
   configurePsync();
-  std::cout << "Psync configured" << std::endl;
+  std::cout << "Psync configured" << '\n';
 }
 
 void ServerConnection::handleConnection() {
   handShake();
   m_ready_callback();
-  std::cout << "Handshake done" << std::endl;
+  std::cout << "Handshake done" << '\n';
 
   try {
     while (true) {
       std::string data = readFromSocket(getSocketFd());
       if (data.empty()) {
-        std::cout << "Server disconnected at: " << getSocketFd() << std::endl;
+        std::cout << "Server disconnected at: " << getSocketFd() << '\n';
         break;
       }
 
       std::cout << "Received: " << data << " from master: " << getSocketFd()
-                << std::endl;
+                << '\n';
 
-      std::stringstream ss(data);
+      std::stringstream socket_data(data);
       std::size_t total_bytes_received = data.size();
       std::size_t bytes_recorded = 0;
-      while (ss.peek() != std::char_traits<char>::eof()) {
-        auto [command, args] = parseCommand(ss);
+      while (socket_data.peek() != std::char_traits<char>::eof()) {
+        auto [command, args] = parseCommand(socket_data, getContext());
         auto responses = command->execute(args, *this);
         std::string serialized_response;
         for (const auto &response : responses) {
-          serialized_response += response->serialize();
+          serialized_response += response.serialize();
         }
-        if (command->getType() == Command::REPLCONF) {
+        if (command->getType() == Command::Type::REPLCONF) {
           writeToSocket(getSocketFd(), serialized_response);
         }
-        std::streampos pos = ss.tellg();
+        std::streampos pos = socket_data.tellg();
         std::size_t bytes_remaining =
-            (pos != -1) ? (ss.str().size() - static_cast<std::size_t>(pos)) : 0;
+            (pos != -1)
+                ? (socket_data.str().size() - static_cast<std::size_t>(pos))
+                : 0;
         std::size_t bytes_read = total_bytes_received - bytes_remaining;
         std::size_t new_bytes_read = bytes_read - bytes_recorded;
-        auto &slave_state = ReplicationManager::getInstance().slave();
+        auto &slave_state = getContext().getReplicationManager().slave();
         slave_state.addBytesProcessed(new_bytes_read);
         bytes_recorded += new_bytes_read;
       }
     }
   } catch (const std::exception &exp) {
     std::cerr << "Server connection error [fd=" << getSocketFd()
-              << "]: " << exp.what() << std::endl;
+              << "]: " << exp.what() << '\n';
   }
 }

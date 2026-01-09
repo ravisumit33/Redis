@@ -1,37 +1,51 @@
 #include "commands/ZscoreCommand.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
-#include "redis_store/RedisStore.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 #include "redis_store/values/SetValue.hpp"
+#include <cstdint>
 #include <iomanip>
-#include <memory>
 #include <sstream>
 
-CommandRegistrar<ZscoreCommand> ZscoreCommand::registrar("ZSCORE");
-
-std::vector<std::unique_ptr<RespType>>
-ZscoreCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                           Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
-  auto member = static_cast<RespBulkString &>(*args.at(1)).getValue();
-
-  auto val = RedisStore::instance().get(store_key);
+std::vector<RespValue>
+ZscoreCommand::doExecute(const std::vector<RespValue> &args,
+                         AppContext &context) {
+  std::vector<RespValue> result;
+  auto store_key = getStringValue(args.at(0));
+  auto member = getStringValue(args.at(1));
+  constexpr uint8_t required_precision = 15;
+  auto val = context.getRedisStore().get(store_key);
   std::string score_str;
   if (val) {
-    auto set_val = static_cast<SetValue &>(*(val.value()));
-    try {
-      auto score = set_val.getScore(member);
-      std::ostringstream oss;
-      oss << std::fixed << std::setprecision(15) << score;
-      score_str = oss.str();
-    } catch (...) {
+    auto *set_val = std::get_if<SetValue>(&val.value());
+    if (set_val != nullptr) {
+      try {
+        auto score = set_val->getScore(member);
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(required_precision) << score;
+        score_str = oss.str();
+      } catch (...) {
+      }
     }
   }
 
   if (!score_str.empty()) {
-    result.push_back(std::make_unique<RespBulkString>(score_str));
+    result.emplace_back(RespBulkString(score_str));
   } else {
-    result.push_back(std::make_unique<RespBulkString>());
+    result.emplace_back(RespBulkString());
   }
   return result;
+}
+
+std::vector<RespValue>
+ZscoreCommand::executeOnImpl(const std::vector<RespValue> &args,
+                             ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+ZscoreCommand::executeOnImpl(const std::vector<RespValue> &args,
+                             ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

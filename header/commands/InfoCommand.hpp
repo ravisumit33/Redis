@@ -2,19 +2,24 @@
 
 #include "Command.hpp"
 
+class AppContext;
+
 class InfoCommand : public Command {
 public:
-  InfoCommand() : Command(INFO) {}
+  InfoCommand() : Command(Type::INFO) {}
+
+protected:
+  std::vector<RespValue> executeOnImpl(const std::vector<RespValue> &args,
+                                       ClientConnection &connection) override;
+
+  std::vector<RespValue> executeOnImpl(const std::vector<RespValue> &args,
+                                       ServerConnection &connection) override;
 
 private:
-  static CommandRegistrar<InfoCommand> registrar;
+  static std::vector<RespValue> doExecute(const std::vector<RespValue> &args,
+                                          AppContext &context);
 
-  virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              Connection &connection) override;
-
-  virtual bool validateArgsImpl(
-      const std::vector<std::unique_ptr<RespType>> &args) override {
+  bool validateArgsImpl(const std::vector<RespValue> &args) override {
     return args.size() == 1;
   }
 };

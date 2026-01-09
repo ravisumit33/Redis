@@ -1,24 +1,36 @@
 #include "commands/KeysCommand.hpp"
-#include "Connection.hpp"
-#include "redis_store/RedisStore.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
+#include "redis_store/RedisStore.hpp"
 
-CommandRegistrar<KeysCommand> KeysCommand::registrar("KEYS");
-
-std::vector<std::unique_ptr<RespType>>
-KeysCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto arg1 = static_cast<RespBulkString &>(*args.at(0)).getValue();
+std::vector<RespValue>
+KeysCommand::doExecute(const std::vector<RespValue> &args,
+                       AppContext &context) {
+  std::vector<RespValue> result;
+  auto arg1 = getStringValue(args.at(0));
   if (arg1 != "*") {
-    result.push_back(std::make_unique<RespError>("Invalid argument: " + arg1));
+    result.emplace_back(RespError("Invalid argument: " + arg1));
     return result;
   }
-  auto store_keys = RedisStore::instance().getKeys();
-  auto resp_array = std::make_unique<RespArray>();
+  auto store_keys = context.getRedisStore().getKeys();
+  RespArray resp_array;
   for (const auto &store_key : store_keys) {
-    resp_array->add(std::make_unique<RespBulkString>(store_key));
+    resp_array.add(RespBulkString(store_key));
   }
-  result.push_back(std::move(resp_array));
+  result.emplace_back(std::move(resp_array));
   return result;
+}
+
+std::vector<RespValue>
+KeysCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+KeysCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

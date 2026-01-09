@@ -1,35 +1,47 @@
 #include "commands/InfoCommand.hpp"
 #include "AppConfig.hpp"
-#include "Connection.hpp"
+#include "AppContext.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 #include <string>
 
-CommandRegistrar<InfoCommand> InfoCommand::registrar("INFO");
+std::vector<RespValue>
+InfoCommand::doExecute(const std::vector<RespValue> &args,
+                       AppContext &context) {
+  std::vector<RespValue> result;
+  const auto &config = context.getConfig();
 
-std::vector<std::unique_ptr<RespType>>
-InfoCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  const AppConfig &config = connection.getConfig();
-
-  auto arg = static_cast<RespBulkString &>(*args.at(0)).getValue();
+  auto arg = getStringValue(args.at(0));
   if (arg != "replication") {
-    result.push_back(std::make_unique<RespError>("Unsupported command arg"));
+    result.emplace_back(RespError("Unsupported command arg"));
     return result;
   }
 
   if (config.getSlaveConfig()) {
-    result.push_back(std::make_unique<RespBulkString>("role:slave"));
+    result.emplace_back(RespBulkString("role:slave"));
     return result;
   }
   std::string replicationInfo = "role:master";
-  auto &master_state = ReplicationManager::getInstance().master();
+  auto &master_state = context.getReplicationManager().master();
   std::string master_replid = master_state.getReplId();
   uint64_t master_repl_offset = master_state.getReplOffset();
   replicationInfo += std::string("\n") + "master_replid:" + master_replid;
   replicationInfo += std::string("\n") +
                      "master_repl_offset:" + std::to_string(master_repl_offset);
-  result.push_back(std::make_unique<RespBulkString>(replicationInfo));
+  result.emplace_back(RespBulkString(replicationInfo));
   return result;
+}
+
+std::vector<RespValue>
+InfoCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+InfoCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

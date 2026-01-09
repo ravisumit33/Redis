@@ -1,28 +1,38 @@
 #include "commands/BlpopCommand.hpp"
-#include "Connection.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
-#include "redis_store/RedisStore.hpp"
-#include <optional>
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 
-CommandRegistrar<BlpopCommand> BlpopCommand::registrar("BLPOP");
-
-std::vector<std::unique_ptr<RespType>>
-BlpopCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                          Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
-  auto timeout_s =
-      std::stod(static_cast<RespBulkString &>(*args.at(1)).getValue());
+std::vector<RespValue>
+BlpopCommand::doExecute(const std::vector<RespValue> &args,
+                        AppContext &context) {
+  std::vector<RespValue> result;
+  auto store_key = getStringValue(args.at(0));
+  auto timeout_s = std::stod(getStringValue(args.at(1)));
   auto [timed_out, popped_elements] =
-      RedisStore::instance().removeListElementsAtBegin(store_key, 1, timeout_s);
+      context.getRedisStore().removeListElementsAtBegin(store_key, 1,
+                                                        timeout_s);
   if (timed_out) {
-    result.push_back(std::make_unique<RespBulkString>());
+    result.emplace_back(RespBulkString());
     return result;
   }
-  auto resp_array = std::make_unique<RespArray>();
-  resp_array->add(std::make_unique<RespBulkString>(store_key))
-      ->add(std::make_unique<RespBulkString>(popped_elements.at(0)));
+  RespArray resp_array;
+  resp_array.add(RespBulkString(store_key))
+      .add(RespBulkString(popped_elements.at(0)));
 
-  result.push_back(std::move(resp_array));
+  result.emplace_back(std::move(resp_array));
   return result;
+}
+
+std::vector<RespValue>
+BlpopCommand::executeOnImpl(const std::vector<RespValue> &args,
+                            ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+BlpopCommand::executeOnImpl(const std::vector<RespValue> &args,
+                            ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

@@ -1,25 +1,26 @@
 #include "commands/PingCommand.hpp"
-#include "Connection.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
-#include <memory>
+#include "connections/ServerConnection.hpp"
 
-CommandRegistrar<PingCommand> PingCommand::registrar("PING");
-
-std::vector<std::unique_ptr<RespType>>
-PingCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  if (connection.getType() == Connection::Type::CLIENT) {
-    auto &client_connection = static_cast<ClientConnection &>(connection);
-    if (client_connection.isInSubscribedMode()) {
-      auto resp_array = std::make_unique<RespArray>();
-      resp_array->add(std::make_unique<RespBulkString>("pong"))
-          ->add(std::make_unique<RespBulkString>(""));
-      result.push_back(std::move(resp_array));
-      return result;
-    }
+std::vector<RespValue>
+PingCommand::executeOnImpl(const std::vector<RespValue> & /*args*/,
+                           ClientConnection &connection) {
+  std::vector<RespValue> result;
+  if (connection.isInSubscribedMode()) {
+    RespArray resp_array;
+    resp_array.add(RespBulkString("pong")).add(RespBulkString(""));
+    result.emplace_back(std::move(resp_array));
+    return result;
   }
-  result.push_back(std::make_unique<RespString>("PONG"));
+  result.emplace_back(RespString("PONG"));
+  return result;
+}
+
+std::vector<RespValue>
+PingCommand::executeOnImpl(const std::vector<RespValue> & /*args*/,
+                           ServerConnection & /*connection*/) {
+  std::vector<RespValue> result;
+  result.emplace_back(RespString("PONG"));
   return result;
 }

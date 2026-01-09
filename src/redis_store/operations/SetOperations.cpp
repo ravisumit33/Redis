@@ -1,44 +1,46 @@
 #include "redis_store/RedisStore.hpp"
 #include "redis_store/values/SetValue.hpp"
-#include <memory>
 #include <string>
 
 std::size_t RedisStore::addMemberToSet(const std::string &key, double score,
                                        const std::string &member) {
   auto store = writeStore();
-  auto it = store->find(key);
+  auto itr = store->find(key);
 
   bool inserted = true;
-  if (it == store->end()) {
-    auto val = std::make_unique<SetValue>();
-    val->addMember(score, member);
-    store->insert_or_assign(key, std::move(val));
+  if (itr == store->end()) {
+    auto val = SetValue();
+    val.addMember(score, member);
+    store->insert_or_assign(key, val);
   } else {
-    auto &set = static_cast<SetValue &>(*it->second);
-    inserted = set.addMember(score, member);
+    auto *set = std::get_if<SetValue>(&itr->second);
+    if (set == nullptr) {
+      throw std::runtime_error("Key doesn't correspond to SET value type");
+    }
+    inserted = set->addMember(score, member);
   }
   notifyBlockingClients(key);
-  return inserted;
+  return static_cast<std::size_t>(inserted);
 }
 
 unsigned int RedisStore::getSetMemberRank(const std::string &key,
-                                          const std::string &member) {
+                                          const std::string &member) const {
   auto store = readStore();
-  auto &it = store->at(key);
-  if (it->getType() != RedisStoreValue::SET) {
+  const auto &itr = store->at(key);
+  const auto *set = std::get_if<SetValue>(&itr);
+  if (set == nullptr) {
     throw std::runtime_error("Key doesn't correspond to SET value type");
   }
-  auto &set = static_cast<SetValue &>(*it);
-  return set.getRank(member);
+  return set->getRank(member);
 }
 
 std::size_t RedisStore::removeMemberFromSet(const std::string &key,
                                             const std::string &member) {
-  auto store = readStore();
-  auto &it = store->at(key);
-  if (it->getType() != RedisStoreValue::SET) {
+  auto store = writeStore();
+  auto &itr = store->at(key);
+  auto *set = std::get_if<SetValue>(&itr);
+  if (set == nullptr) {
     throw std::runtime_error("Key doesn't correspond to SET value type");
   }
-  auto &set = static_cast<SetValue &>(*it);
-  return set.erase(member);
+  return set->erase(member);
 }

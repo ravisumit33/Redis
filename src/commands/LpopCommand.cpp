@@ -1,35 +1,45 @@
 #include "commands/LpopCommand.hpp"
-#include "Connection.hpp"
-#include "redis_store/RedisStore.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 
-CommandRegistrar<LpopCommand> LpopCommand::registrar("LPOP");
-
-std::vector<std::unique_ptr<RespType>>
-LpopCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                         Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-  auto store_key = static_cast<RespBulkString &>(*args.at(0)).getValue();
+std::vector<RespValue>
+LpopCommand::doExecute(const std::vector<RespValue> &args,
+                       AppContext &context) {
+  std::vector<RespValue> result;
+  auto store_key = getStringValue(args.at(0));
   unsigned el_count = 1;
   if (args.size() == 2) {
-    el_count =
-        std::stoul(static_cast<RespBulkString &>(*args.at(1)).getValue());
+    el_count = std::stoul(getStringValue(args.at(1)));
   }
-  auto [_, popped_elements] =
-      RedisStore::instance().removeListElementsAtBegin(store_key, el_count);
+  auto [removed, popped_elements] =
+      context.getRedisStore().removeListElementsAtBegin(store_key, el_count);
   if (popped_elements.empty()) {
-    result.push_back(std::make_unique<RespBulkString>());
+    result.emplace_back(RespBulkString());
     return result;
   }
   if (el_count == 1) {
-    result.push_back(std::make_unique<RespBulkString>(popped_elements.at(0)));
+    result.emplace_back(RespBulkString(popped_elements.at(0)));
     return result;
   }
 
-  auto resp_array = std::make_unique<RespArray>();
-  for (const auto &el : popped_elements) {
-    resp_array->add(std::make_unique<RespBulkString>(el));
+  RespArray resp_array;
+  for (const auto &elem : popped_elements) {
+    resp_array.add(RespBulkString(elem));
   }
-  result.push_back(std::move(resp_array));
+  result.emplace_back(std::move(resp_array));
   return result;
+}
+
+std::vector<RespValue>
+LpopCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+LpopCommand::executeOnImpl(const std::vector<RespValue> &args,
+                           ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }

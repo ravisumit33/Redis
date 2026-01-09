@@ -8,6 +8,14 @@
 
 class FifoBlockingQueue {
 public:
+  FifoBlockingQueue() = default;
+  ~FifoBlockingQueue();
+
+  FifoBlockingQueue(const FifoBlockingQueue &) = delete;
+  FifoBlockingQueue &operator=(const FifoBlockingQueue &) = delete;
+  FifoBlockingQueue(FifoBlockingQueue &&) = delete;
+  FifoBlockingQueue &operator=(FifoBlockingQueue &&) = delete;
+
   class WaitToken {
   public:
     WaitToken(FifoBlockingQueue &queue);
@@ -58,8 +66,6 @@ public:
   void notify_all();
 
   std::size_t waiting_count() const;
-
-  ~FifoBlockingQueue();
 
 private:
   mutable std::mutex m_queue_mutex;

@@ -1,19 +1,23 @@
 #pragma once
 
-#include "Registrar.hpp"
 #include "Registry.hpp"
 #include "RespType.hpp"
-#include <memory>
+#include <cstdint>
 #include <string>
 #include <vector>
 
-class Connection;
+class ClientConnection;
+class ServerConnection;
 
 class Command {
 public:
   virtual ~Command() = default;
+  Command(const Command &) = delete;
+  Command &operator=(const Command &) = delete;
+  Command(Command &&) = delete;
+  Command &operator=(Command &&) = delete;
 
-  enum Type {
+  enum class Type : std::uint8_t {
     ECHO,
     PING,
     SET,
@@ -49,22 +53,31 @@ public:
     ZREM,
   };
 
-  std::vector<std::unique_ptr<RespType>>
-  execute(const std::vector<std::unique_ptr<RespType>> &args,
-          Connection &connection) {
+  std::vector<RespValue> execute(const std::vector<RespValue> &args,
+                                 ClientConnection &connection) {
     bool args_valid = validateArgs(args);
     if (!args_valid) {
-
-      std::vector<std::unique_ptr<RespType>> result;
-      result.push_back(std::make_unique<RespError>("Invalid args"));
+      std::vector<RespValue> result;
+      result.emplace_back(RespError("Invalid args"));
       return result;
     }
-    return executeImpl(args, connection);
+    return executeOnImpl(args, connection);
+  }
+
+  std::vector<RespValue> execute(const std::vector<RespValue> &args,
+                                 ServerConnection &connection) {
+    bool args_valid = validateArgs(args);
+    if (!args_valid) {
+      std::vector<RespValue> result;
+      result.emplace_back(RespError("Invalid args"));
+      return result;
+    }
+    return executeOnImpl(args, connection);
   }
 
   Type getType() const { return m_type; }
 
-  std::string getTypeStr() const;
+  static std::string getTypeStr(Type type);
 
   bool isWriteCommand() const;
 
@@ -73,30 +86,32 @@ public:
   bool isSubscribedModeCommand() const;
 
 protected:
-  Command(Type t) : m_type(t) {}
+  Command(Type cmd_type) : m_type(cmd_type) {}
+
+  virtual std::vector<RespValue>
+  executeOnImpl(const std::vector<RespValue> &args,
+                ClientConnection &connection);
+
+  virtual std::vector<RespValue>
+  executeOnImpl(const std::vector<RespValue> &args,
+                ServerConnection &connection);
 
 private:
-  bool validateArgs(const std::vector<std::unique_ptr<RespType>> &args) {
+  bool validateArgs(const std::vector<RespValue> &args) {
     size_t nargs = args.size();
-    for (int i = 0; i < nargs; ++i) {
-      if (args[i]->getType() != RespType::BULK_STRING) {
+    for (size_t i = 0; i < nargs; ++i) {
+      if (args[i].getType() != RespType::BULK_STRING) {
         return false;
       }
     }
     return validateArgsImpl(args);
   }
 
-  virtual std::vector<std::unique_ptr<RespType>>
-  executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-              Connection &connection) = 0;
-
-  virtual bool
-  validateArgsImpl(const std::vector<std::unique_ptr<RespType>> &args) = 0;
+  virtual bool validateArgsImpl(const std::vector<RespValue> &args) = 0;
 
   Type m_type;
 };
 
 using CommandRegistry = Registry<std::string, Command>;
 
-template <typename T>
-using CommandRegistrar = Registrar<std::string, Command, T>;
+void registerCommands(CommandRegistry &registry);

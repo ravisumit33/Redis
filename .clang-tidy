@@ -1,0 +1,19 @@
+Checks: >
+  clang-analyzer-*,
+  -clang-analyzer-alpha*
+  bugprone-*,
+  cert-*,
+  security-*,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-use-nodiscard,
+  performance-*,
+  cppcoreguidelines-*,
+  readability-*,
+  misc-*
+WarningsAsErrors: "*"
+HeaderFilterRegex: ".*"
+ExcludeHeaderFilterRegex: ""
+FormatStyle: file
+ExtraArgs:
+  - -std=c++23

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -21,7 +22,7 @@ public:
 
   template <typename T> T get(const std::string &name) const;
 
-  void parse(int argc, char *argv[]);
+  void parse(std::span<char *> args);
 
   void printHelp(const std::string &progName) const;
 
@@ -50,19 +51,19 @@ private:
 };
 
 template <> inline bool ArgParser::get(const std::string &name) const {
-  if (auto it = m_flags.find(name); it != m_flags.end()) {
-    return it->second.value;
+  if (auto itr = m_flags.find(name); itr != m_flags.end()) {
+    return itr->second.value;
   }
 
   throw std::runtime_error("Argument not found: " + name);
 }
 
 template <> inline std::string ArgParser::get(const std::string &name) const {
-  if (auto it = m_options.find(name); it != m_options.end()) {
-    if (it->second.value) {
-      return *(it->second.value);
+  if (auto itr = m_options.find(name); itr != m_options.end()) {
+    if (itr->second.value) {
+      return *(itr->second.value);
     }
-    return it->second.defaultValue;
+    return itr->second.defaultValue;
   }
 
   for (const auto &pos : m_positionals) {

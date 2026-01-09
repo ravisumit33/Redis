@@ -18,8 +18,8 @@ void MasterState::propagateToSlave(const std::string &data) {
     return;
   }
   std::cout << "Propagating write command to " << getSlaveCount() << " slaves"
-            << std::endl;
-  for (const auto [slave_fd, _] : m_slaves) {
+            << '\n';
+  for (const auto [slave_fd, slave_offset] : m_slaves) {
     writeToSocket(slave_fd, data);
   }
 }
@@ -28,28 +28,28 @@ void MasterState::sendGetAckToSlaves() {
   std::vector<unsigned> curr_slave_fds;
   {
     std::lock_guard<std::mutex> lock(m_mutex);
-    for (const auto [slave_fd, _] : m_slaves) {
+    for (const auto [slave_fd, slave_offset] : m_slaves) {
       curr_slave_fds.push_back(slave_fd);
     }
   }
 
   for (const unsigned slave_fd : curr_slave_fds) {
-    auto array = RespArray();
-    array.add(std::make_unique<RespBulkString>("REPLCONF"));
-    array.add(std::make_unique<RespBulkString>("GETACK"));
-    array.add(std::make_unique<RespBulkString>("*"));
+    RespArray array;
+    array.add(RespBulkString("REPLCONF"));
+    array.add(RespBulkString("GETACK"));
+    array.add(RespBulkString("*"));
     writeToSocket(slave_fd, array.serialize());
   }
 }
 
 void MasterState::updateSlave(unsigned slave_fd, uint64_t offset) {
   std::lock_guard<std::mutex> lock(m_mutex);
-  auto it = m_slaves.find(slave_fd);
-  if (it != m_slaves.end()) {
-    it->second = offset;
+  auto itr = m_slaves.find(slave_fd);
+  if (itr != m_slaves.end()) {
+    itr->second = offset;
     m_cv.notify_all();
     std::cout << "Slave [fd=" << slave_fd << "] updated with offset: " << offset
-              << std::endl;
+              << '\n';
   }
 }
 
@@ -75,7 +75,7 @@ unsigned MasterState::waitForSlaves(unsigned expected_slaves_count,
       return done_slaves_count;
     }
     if (m_cv.wait_until(lock, deadline) == std::cv_status::timeout) {
-      std::cout << "Dealine of " << timeout_ms << " ms reached" << std::endl;
+      std::cout << "Dealine of " << timeout_ms << " ms reached" << '\n';
       return count_done_slaves();
     }
   }

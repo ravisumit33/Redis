@@ -1,29 +1,39 @@
 #include "commands/GetCommand.hpp"
-#include "Connection.hpp"
+#include "AppContext.hpp"
 #include "RespType.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
 #include "redis_store/RedisStore.hpp"
 #include "redis_store/values/StringValue.hpp"
 
-CommandRegistrar<GetCommand> GetCommand::registrar("GET");
+std::vector<RespValue> GetCommand::doExecute(const std::vector<RespValue> &args,
+                                             AppContext &context) {
+  std::vector<RespValue> result;
 
-std::vector<std::unique_ptr<RespType>>
-GetCommand::executeImpl(const std::vector<std::unique_ptr<RespType>> &args,
-                        Connection &connection) {
-  std::vector<std::unique_ptr<RespType>> result;
-
-  auto key = static_cast<RespBulkString &>(*args.at(0)).getValue();
-  auto stored_value = RedisStore::instance().get(key);
+  auto key = getStringValue(args.at(0));
+  auto stored_value = context.getRedisStore().get(key);
   if (!stored_value) {
-    result.push_back(std::make_unique<RespBulkString>());
+    result.emplace_back(RespBulkString());
     return result;
   }
 
-  auto return_value = std::move(stored_value.value());
-  if (return_value->getType() != RedisStoreValue::STRING) {
-    result.push_back(std::make_unique<RespError>("Invalid Key"));
+  auto *string_val = std::get_if<StringValue>(&stored_value.value());
+  if (string_val == nullptr) {
+    result.emplace_back(RespError("Invalid Key"));
     return result;
   }
-  result.push_back(std::make_unique<RespBulkString>(
-      static_cast<StringValue &>(*return_value).getValue()));
+  result.emplace_back(RespBulkString(string_val->getValue()));
   return result;
+}
+
+std::vector<RespValue>
+GetCommand::executeOnImpl(const std::vector<RespValue> &args,
+                          ClientConnection &connection) {
+  return doExecute(args, connection.getContext());
+}
+
+std::vector<RespValue>
+GetCommand::executeOnImpl(const std::vector<RespValue> &args,
+                          ServerConnection &connection) {
+  return doExecute(args, connection.getContext());
 }
