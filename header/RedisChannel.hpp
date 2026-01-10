@@ -111,5 +111,5 @@ public:
   RedisChannel *getChannel(const std::string &channel_name);
 
 private:
-  std::unordered_map<std::string, std::unique_ptr<RedisChannel>> m_channel_map;
+  std::unordered_map<std::string, std::shared_ptr<RedisChannel>> m_channel_map;
 };

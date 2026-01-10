@@ -45,7 +45,7 @@ XreadCommand::doExecute(const std::vector<RespValue> &args,
           store_keys, entry_ids_start, timeout_ms);
 
   if (timed_out) {
-    result.emplace_back(RespBulkString());
+    result.emplace_back(RespArray::null());
     return result;
   }
 

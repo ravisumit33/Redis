@@ -104,6 +104,10 @@ public:
 
   ~RespArray() = default;
 
+  static RespArray null();
+
+  bool isNull() const { return m_is_null; }
+
   RespArray &add(RespValue item);
 
   const RespValue &at(size_t idx) const;
@@ -120,6 +124,7 @@ public:
 
 private:
   std::vector<std::unique_ptr<RespValue>> m_elements;
+  bool m_is_null = false;
 };
 
 using RespValueVariant =
@@ -221,12 +226,21 @@ inline std::vector<RespValue> RespArray::release() {
 }
 
 inline std::string RespArray::serialize() const {
+  if (m_is_null) {
+    return std::string("*-1") + std::string(kCrlf);
+  }
   std::string serialized_string("*");
   serialized_string += std::to_string(m_elements.size()) + std::string(kCrlf);
   for (const auto &element : m_elements) {
     serialized_string += element->serialize();
   }
   return serialized_string;
+}
+
+inline RespArray RespArray::null() {
+  RespArray arr;
+  arr.m_is_null = true;
+  return arr;
 }
 
 inline const std::string &getStringValue(const RespValue &value) {

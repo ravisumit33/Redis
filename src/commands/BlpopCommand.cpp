@@ -14,7 +14,7 @@ BlpopCommand::doExecute(const std::vector<RespValue> &args,
       context.getRedisStore().removeListElementsAtBegin(store_key, 1,
                                                         timeout_s);
   if (timed_out) {
-    result.emplace_back(RespBulkString());
+    result.emplace_back(RespArray::null());
     return result;
   }
   RespArray resp_array;

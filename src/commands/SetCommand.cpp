@@ -4,6 +4,8 @@
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
 #include "redis_store/RedisStore.hpp"
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <exception>
@@ -20,7 +22,10 @@ std::vector<RespValue> SetCommand::doExecute(const std::vector<RespValue> &args,
   std::optional<std::chrono::system_clock::time_point> expiry = std::nullopt;
   if (nargs == 4) {
     auto expiryArgName = getStringValue(args.at(2));
-    if (expiryArgName != "px") {
+    std::string expiryArgLower = expiryArgName;
+    std::ranges::transform(expiryArgLower, expiryArgLower.begin(),
+                           [](unsigned char chr) { return std::tolower(chr); });
+    if (expiryArgLower != "px") {
       result.emplace_back(RespError("Unsupported command arg"));
       return result;
     }

@@ -87,6 +87,6 @@ RedisChannel *RedisChannelManager::getChannel(const std::string &channel_name) {
   if (itr != m_channel_map.end()) {
     return itr->second.get();
   }
-  auto channel_ptr = std::make_unique<RedisChannel>(channel_name);
+  auto channel_ptr = std::make_shared<RedisChannel>(channel_name);
   return (m_channel_map[channel_name] = std::move(channel_ptr)).get();
 }

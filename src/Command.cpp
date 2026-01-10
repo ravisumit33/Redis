@@ -1,4 +1,5 @@
 #include "Command.hpp"
+#include <memory>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -11,6 +12,7 @@ class ServerConnection;
 #include "commands/DiscardCommand.hpp"
 #include "commands/EchoCommand.hpp"
 #include "commands/ExecCommand.hpp"
+#include "commands/GeoaddCommand.hpp"
 #include "commands/GetCommand.hpp"
 #include "commands/IncrCommand.hpp"
 #include "commands/InfoCommand.hpp"
@@ -92,6 +94,7 @@ std::string Command::getTypeStr(Type type) {
       {Type::ZCARD, "ZCARD"},
       {Type::ZSCORE, "ZSCORE"},
       {Type::ZREM, "ZREM"},
+      {Type::GEOADD, "GEOADD"},
   };
 
   auto itr = type_strings.find(type);
@@ -182,4 +185,6 @@ void registerCommands(CommandRegistry &registry) {
                []() { return std::make_unique<ZremCommand>(); });
   registry.add(Command::getTypeStr(Command::Type::ZSCORE),
                []() { return std::make_unique<ZscoreCommand>(); });
+  registry.add(Command::getTypeStr(Command::Type::GEOADD),
+               []() { return std::make_unique<GeoaddCommand>(); });
 }

@@ -51,6 +51,7 @@ public:
     ZCARD,
     ZSCORE,
     ZREM,
+    GEOADD,
   };
 
   std::vector<RespValue> execute(const std::vector<RespValue> &args,
