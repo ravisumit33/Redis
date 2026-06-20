@@ -19,8 +19,8 @@ public:
   }
 
   template <typename Conn>
-  std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                 Conn &conn) const {
+  static std::vector<RespValue> execute(const std::vector<RespValue> &args,
+                                        Conn &conn) {
     return doExecute(args, conn.getContext().getConfig(),
                      conn.getContext().getReplicationManager());
   }
