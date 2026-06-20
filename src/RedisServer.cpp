@@ -77,11 +77,10 @@ void RedisServer::start() {
       RdbParserRegistry rdb_registry;
       registerRdbParsers(rdb_registry);
       RdbParseState state;
-      RdbHeaderParser rdb_header_parser;
-      rdb_header_parser.parse(rdb_fstream, rdb_registry,
-                              m_context.getRedisStore(), state);
+      RdbHeaderParser::parse(rdb_fstream, rdb_registry,
+                             m_context.getRedisStore(), state);
       while (rdb_fstream.peek() != std::char_traits<char>::eof()) {
-        char opc = static_cast<char>(rdb_fstream.get());
+        const char opc = static_cast<char>(rdb_fstream.get());
         if (!rdb_fstream) {
           throw std::runtime_error("Failure reading rdb file");
         }
@@ -93,8 +92,8 @@ void RedisServer::start() {
               std::to_string(static_cast<uint8_t>(rdb_opcode)) +
               " found during RDB parsing");
         }
-        parser->parse(rdb_fstream, rdb_registry, m_context.getRedisStore(),
-                      state);
+        parseRdb(*parser, rdb_fstream, rdb_registry, m_context.getRedisStore(),
+                 state);
       }
     }
     m_init_done = true;
@@ -166,8 +165,8 @@ void RedisServer::acceptConnections() {
   std::cout << "Waiting for clients to connect..." << '\n';
 
   while (m_isRunning) {
-    int client_fd = accept(m_server_fd, SocketUtils::toSockAddr(&client_addr),
-                           &client_addr_len);
+    const int client_fd = accept(
+        m_server_fd, SocketUtils::toSockAddr(&client_addr), &client_addr_len);
 
     if (client_fd < 0) {
       if (m_isRunning) {
@@ -187,7 +186,8 @@ void RedisServer::acceptConnections() {
       }
 
       auto self = shared_from_this();
-      // `self` keeps RedisServer (and m_context) alive for the thread's lifetime.
+      // `self` keeps RedisServer (and m_context) alive for the thread's
+      // lifetime.
       std::thread client_thread([self, client_fd]() {
         try {
           ClientConnection client_con(client_fd, self->m_context);

@@ -2,11 +2,11 @@
 
 #include <functional>
 #include <map>
-#include <memory>
+#include <optional>
 
 template <typename Key, typename Value> class Registry {
 public:
-  using Factory = std::function<std::unique_ptr<Value>()>;
+  using Factory = std::function<Value()>;
 
   Registry() = default;
   ~Registry() = default;
@@ -20,10 +20,10 @@ public:
     mFactoryMap[key] = std::move(factory);
   }
 
-  std::unique_ptr<Value> get(const Key &key) const {
+  std::optional<Value> get(const Key &key) const {
     auto iter = mFactoryMap.find(key);
     if (iter == mFactoryMap.end()) {
-      return nullptr;
+      return std::nullopt;
     }
     return iter->second();
   }

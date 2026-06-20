@@ -3,32 +3,38 @@
 #include "utils/genericUtils.hpp"
 #include <bit>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <istream>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
+#include <variant>
 
-std::pair<bool, uint64_t>
-RdbPayloadParser::readSizeEncodedValue(std::istream &in_stream) {
+namespace {
+
+std::pair<bool, uint64_t> readSizeEncodedValue(std::istream &in_stream) {
   constexpr unsigned ENCODING_TYPE_BIT_SHIFT = 6;
   constexpr uint8_t LOWER_SIX_BITS_MASK = 0x3F;
   constexpr unsigned BYTE_BIT_SHIFT = 8;
 
   auto [byte] = readBytes<1>(in_stream);
-  unsigned first_two_bits = (byte >> ENCODING_TYPE_BIT_SHIFT);
+  const unsigned first_two_bits = (byte >> ENCODING_TYPE_BIT_SHIFT);
   switch (first_two_bits) {
   case 0b00:
     return {false, byte & LOWER_SIX_BITS_MASK};
   case 0b01: {
     auto [next_byte] = readBytes<1>(in_stream);
-    uint64_t size = (static_cast<uint64_t>(byte) << BYTE_BIT_SHIFT) | next_byte;
+    const uint64_t size =
+        (static_cast<uint64_t>(byte) << BYTE_BIT_SHIFT) | next_byte;
     return {false, size};
   }
   case 0b10: {
-    uint64_t size = bytesToUInt(readBytes<4>(in_stream));
+    const uint64_t size = bytesToUInt(readBytes<4>(in_stream));
     return {false, size};
   }
   case 0b11:
@@ -40,7 +46,7 @@ RdbPayloadParser::readSizeEncodedValue(std::istream &in_stream) {
   }
 }
 
-std::string RdbPayloadParser::readString(std::istream &in_stream) {
+std::string readString(std::istream &in_stream) {
   constexpr uint64_t ENCODING_8BIT_INT = 0xC0;
   constexpr uint64_t ENCODING_16BIT_INT = 0xC1;
   constexpr uint64_t ENCODING_32BIT_INT = 0xC2;
@@ -81,19 +87,39 @@ std::string RdbPayloadParser::readString(std::istream &in_stream) {
   }
 }
 
+bool isInlineMetadata(RdbOpcode opcode) {
+  static const std::unordered_set<RdbOpcode> inline_metadata_opcodes = {
+      RdbOpcode::HASHDATA, RdbOpcode::VALUE_EXPIRETIME,
+      RdbOpcode::VALUE_EXPIRETIME_MS, RdbOpcode::STRING_VALUE};
+  return inline_metadata_opcodes.contains(opcode);
+}
+
+} // namespace
+
+void parseRdb(RdbParser &parser, std::istream &in_stream,
+              RdbParserRegistry &registry, RedisStore &store,
+              RdbParseState &state) {
+  std::visit(
+      [&](auto &rdb_parser) {
+        rdb_parser.parse(in_stream, registry, store, state);
+      },
+      parser);
+}
+
 void RdbHeaderParser::parse(std::istream &in_stream,
                             RdbParserRegistry & /*registry*/,
                             RedisStore & /*store*/, RdbParseState & /*state*/) {
   constexpr size_t MAGIC_STRING_LENGTH = 5;
   auto magic_string_bytes = readBytes<MAGIC_STRING_LENGTH>(in_stream);
-  std::string magic_string(magic_string_bytes.begin(),
-                           magic_string_bytes.end());
+  const std::string magic_string(magic_string_bytes.begin(),
+                                 magic_string_bytes.end());
   if (magic_string != "REDIS") {
     throw std::runtime_error("Wrong magic string. Expected: REDIS, found: " +
                              magic_string);
   }
   auto version_num_bytes = readBytes<4>(in_stream);
-  std::string version_num(version_num_bytes.begin(), version_num_bytes.end());
+  const std::string version_num(version_num_bytes.begin(),
+                                version_num_bytes.end());
   if (version_num != "0011") {
     throw std::runtime_error("Wrong version number. Expected: 0011, found: " +
                              version_num);
@@ -118,14 +144,13 @@ void RdbDbParser::parse(std::istream &in_stream, RdbParserRegistry &registry,
 
   while (isInlineMetadata(static_cast<RdbOpcode>(peekByte(in_stream)))) {
     auto [rdb_opcode] = readBytes<1>(in_stream);
-    auto rdb_parser =
-        registry.get(static_cast<RdbOpcode>(rdb_opcode));
+    auto rdb_parser = registry.get(static_cast<RdbOpcode>(rdb_opcode));
     if (!rdb_parser) {
       throw std::runtime_error("Invalid opcode: " + std::to_string(rdb_opcode) +
                                " found during RDB parsing");
     }
     RdbParseState child_state;
-    rdb_parser->parse(in_stream, registry, store, child_state);
+    parseRdb(*rdb_parser, in_stream, registry, store, child_state);
   }
 }
 
@@ -151,8 +176,8 @@ void RdbEofParser::parse(std::istream &in_stream,
 void RdbStringValueParser::parse(std::istream &in_stream,
                                  RdbParserRegistry & /*registry*/,
                                  RedisStore &store, RdbParseState &state) {
-  std::string key = readString(in_stream);
-  std::string value = readString(in_stream);
+  const std::string key = readString(in_stream);
+  const std::string value = readString(in_stream);
   store.setString(key, value, state.expiry);
   std::cout << "Store key: " << key << ", value: " << value;
   if (state.expiry) {
@@ -180,7 +205,7 @@ void RdbKeyValueExpMsParser::parse(std::istream &in_stream,
     throw std::logic_error("Unexpected: parser not found");
   }
   state.expiry = std::chrono::system_clock::time_point{expiry};
-  parser->parse(in_stream, registry, store, state);
+  parseRdb(*parser, in_stream, registry, store, state);
 }
 
 void RdbKeyValueExpSParser::parse(std::istream &in_stream,
@@ -199,22 +224,19 @@ void RdbKeyValueExpSParser::parse(std::istream &in_stream,
     throw std::logic_error("Unexpected: parser not found");
   }
   state.expiry = std::chrono::system_clock::time_point{expiry};
-  parser->parse(in_stream, registry, store, state);
+  parseRdb(*parser, in_stream, registry, store, state);
 }
 
 void registerRdbParsers(RdbParserRegistry &registry) {
-  registry.add(RdbOpcode::AUX,
-               []() { return std::make_unique<RdbAuxKeyParser>(); });
-  registry.add(RdbOpcode::SELECTDB,
-               []() { return std::make_unique<RdbDbParser>(); });
+  registry.add(RdbOpcode::AUX, [] { return RdbParser{RdbAuxKeyParser{}}; });
+  registry.add(RdbOpcode::SELECTDB, [] { return RdbParser{RdbDbParser{}}; });
   registry.add(RdbOpcode::HASHDATA,
-               []() { return std::make_unique<RdbHashTableParser>(); });
-  registry.add(RdbOpcode::EOF_,
-               []() { return std::make_unique<RdbEofParser>(); });
+               [] { return RdbParser{RdbHashTableParser{}}; });
+  registry.add(RdbOpcode::EOF_, [] { return RdbParser{RdbEofParser{}}; });
   registry.add(RdbOpcode::STRING_VALUE,
-               []() { return std::make_unique<RdbStringValueParser>(); });
+               [] { return RdbParser{RdbStringValueParser{}}; });
   registry.add(RdbOpcode::VALUE_EXPIRETIME_MS,
-               []() { return std::make_unique<RdbKeyValueExpMsParser>(); });
+               [] { return RdbParser{RdbKeyValueExpMsParser{}}; });
   registry.add(RdbOpcode::VALUE_EXPIRETIME,
-               []() { return std::make_unique<RdbKeyValueExpSParser>(); });
+               [] { return RdbParser{RdbKeyValueExpSParser{}}; });
 }

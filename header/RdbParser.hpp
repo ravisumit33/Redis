@@ -6,10 +6,9 @@
 #include <istream>
 #include <optional>
 #include <unordered_set>
-#include <utility>
+#include <variant>
 
 class RedisStore;
-class RdbParserRegistry;
 
 enum class RdbOpcode : uint8_t {
   AUX = 0xFA,
@@ -22,13 +21,13 @@ enum class RdbOpcode : uint8_t {
 };
 
 inline bool isSectionStart(RdbOpcode opcode) {
-  static std::unordered_set<RdbOpcode> section_start_opcodes = {
+  static const std::unordered_set<RdbOpcode> section_start_opcodes = {
       RdbOpcode::AUX, RdbOpcode::SELECTDB, RdbOpcode::EOF_};
   return section_start_opcodes.contains(opcode);
 }
 
 inline bool isValue(RdbOpcode opcode) {
-  static std::unordered_set<RdbOpcode> value_opcodes = {
+  static const std::unordered_set<RdbOpcode> value_opcodes = {
       RdbOpcode::STRING_VALUE, RdbOpcode::VALUE_EXPIRETIME_MS,
       RdbOpcode::VALUE_EXPIRETIME};
   return value_opcodes.contains(opcode);
@@ -38,81 +37,57 @@ struct RdbParseState {
   std::optional<std::chrono::system_clock::time_point> expiry = std::nullopt;
 };
 
-class RdbPayloadParser {
-public:
-  RdbPayloadParser() = default;
-  virtual ~RdbPayloadParser() = default;
-  RdbPayloadParser(const RdbPayloadParser &) = delete;
-  RdbPayloadParser &operator=(const RdbPayloadParser &) = delete;
-  RdbPayloadParser(RdbPayloadParser &&) = delete;
-  RdbPayloadParser &operator=(RdbPayloadParser &&) = delete;
+class RdbParserRegistry;
 
-  virtual void parse(std::istream &in_stream, RdbParserRegistry &registry,
-                     RedisStore &store, RdbParseState &state) = 0;
-
-protected:
-  static std::pair<bool, uint64_t>
-  readSizeEncodedValue(std::istream &in_stream);
-
-  static std::string readString(std::istream &in_stream);
+struct RdbHeaderParser {
+  static void parse(std::istream &in_stream, RdbParserRegistry &registry,
+                    RedisStore &store, RdbParseState &state);
 };
 
-class RdbParserRegistry : public Registry<RdbOpcode, RdbPayloadParser> {};
-
-class RdbHeaderParser : public RdbPayloadParser {
-public:
-  void parse(std::istream &in_stream, RdbParserRegistry &registry,
-             RedisStore &store, RdbParseState &state) override;
+struct RdbAuxKeyParser {
+  static void parse(std::istream &in_stream, RdbParserRegistry &registry,
+                    RedisStore &store, RdbParseState &state);
 };
 
-class RdbAuxKeyParser : public RdbPayloadParser {
-public:
-  void parse(std::istream &in_stream, RdbParserRegistry &registry,
-             RedisStore &store, RdbParseState &state) override;
+struct RdbDbParser {
+  static void parse(std::istream &in_stream, RdbParserRegistry &registry,
+                    RedisStore &store, RdbParseState &state);
 };
 
-class RdbDbParser : public RdbPayloadParser {
-public:
-  void parse(std::istream &in_stream, RdbParserRegistry &registry,
-             RedisStore &store, RdbParseState &state) override;
-
-private:
-  static bool isInlineMetadata(RdbOpcode opcode) {
-    static std::unordered_set<RdbOpcode> inline_metadata_opcodes = {
-        RdbOpcode::HASHDATA, RdbOpcode::VALUE_EXPIRETIME,
-        RdbOpcode::VALUE_EXPIRETIME_MS, RdbOpcode::STRING_VALUE};
-    return inline_metadata_opcodes.contains(opcode);
-  }
+struct RdbHashTableParser {
+  static void parse(std::istream &in_stream, RdbParserRegistry &registry,
+                    RedisStore &store, RdbParseState &state);
 };
 
-class RdbHashTableParser : public RdbPayloadParser {
-public:
-  void parse(std::istream &in_stream, RdbParserRegistry &registry,
-             RedisStore &store, RdbParseState &state) override;
+struct RdbEofParser {
+  static void parse(std::istream &in_stream, RdbParserRegistry &registry,
+                    RedisStore &store, RdbParseState &state);
 };
 
-class RdbEofParser : public RdbPayloadParser {
-public:
-  void parse(std::istream &in_stream, RdbParserRegistry &registry,
-             RedisStore &store, RdbParseState &state) override;
+struct RdbStringValueParser {
+  static void parse(std::istream &in_stream, RdbParserRegistry &registry,
+                    RedisStore &store, RdbParseState &state);
 };
 
-class RdbStringValueParser : public RdbPayloadParser {
-public:
-  void parse(std::istream &in_stream, RdbParserRegistry &registry,
-             RedisStore &store, RdbParseState &state) override;
+struct RdbKeyValueExpMsParser {
+  static void parse(std::istream &in_stream, RdbParserRegistry &registry,
+                    RedisStore &store, RdbParseState &state);
 };
 
-class RdbKeyValueExpMsParser : public RdbPayloadParser {
-public:
-  void parse(std::istream &in_stream, RdbParserRegistry &registry,
-             RedisStore &store, RdbParseState &state) override;
+struct RdbKeyValueExpSParser {
+  static void parse(std::istream &in_stream, RdbParserRegistry &registry,
+                    RedisStore &store, RdbParseState &state);
 };
 
-class RdbKeyValueExpSParser : public RdbPayloadParser {
-public:
-  void parse(std::istream &in_stream, RdbParserRegistry &registry,
-             RedisStore &store, RdbParseState &state) override;
-};
+using RdbParser =
+    std::variant<RdbHeaderParser, RdbAuxKeyParser, RdbDbParser,
+                 RdbHashTableParser, RdbEofParser, RdbStringValueParser,
+                 RdbKeyValueExpMsParser, RdbKeyValueExpSParser>;
+
+class RdbParserRegistry : public Registry<RdbOpcode, RdbParser> {};
+
+void parseRdb(RdbParser &parser, std::istream &in_stream,
+              RdbParserRegistry &registry, RedisStore &store,
+              RdbParseState &state);
 
 void registerRdbParsers(RdbParserRegistry &registry);

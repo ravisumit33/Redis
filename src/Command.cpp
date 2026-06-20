@@ -112,40 +112,40 @@ std::string_view getCommandName(const Command &cmd) {
 }
 
 void registerCommands(CommandRegistry &registry) {
-  registry["BLPOP"] = []() -> Command { return BlpopCommand{}; };
-  registry["CONFIG"] = []() -> Command { return ConfigCommand{}; };
-  registry["DISCARD"] = []() -> Command { return DiscardCommand{}; };
-  registry["ECHO"] = []() -> Command { return EchoCommand{}; };
-  registry["EXEC"] = []() -> Command { return ExecCommand{}; };
-  registry["GEOADD"] = []() -> Command { return GeoaddCommand{}; };
-  registry["GET"] = []() -> Command { return GetCommand{}; };
-  registry["INCR"] = []() -> Command { return IncrCommand{}; };
-  registry["INFO"] = []() -> Command { return InfoCommand{}; };
-  registry["KEYS"] = []() -> Command { return KeysCommand{}; };
-  registry["LLEN"] = []() -> Command { return LlenCommand{}; };
-  registry["LPOP"] = []() -> Command { return LpopCommand{}; };
-  registry["LPUSH"] = []() -> Command { return LpushCommand{}; };
-  registry["LRANGE"] = []() -> Command { return LrangeCommand{}; };
-  registry["MULTI"] = []() -> Command { return MultiCommand{}; };
-  registry["PING"] = []() -> Command { return PingCommand{}; };
-  registry["PSYNC"] = []() -> Command { return PsyncCommand{}; };
-  registry["PUBLISH"] = []() -> Command { return PublishCommand{}; };
-  registry["REPLCONF"] = []() -> Command { return ReplConfCommand{}; };
-  registry["RPUSH"] = []() -> Command { return RpushCommand{}; };
-  registry["SET"] = []() -> Command { return SetCommand{}; };
-  registry["SUBSCRIBE"] = []() -> Command { return SubscribeCommand{}; };
-  registry["TYPE"] = []() -> Command { return TypeCommand{}; };
-  registry["UNSUBSCRIBE"] = []() -> Command { return UnsubscribeCommand{}; };
-  registry["WAIT"] = []() -> Command { return WaitCommand{}; };
-  registry["XADD"] = []() -> Command { return XaddCommand{}; };
-  registry["XRANGE"] = []() -> Command { return XrangeCommand{}; };
-  registry["XREAD"] = []() -> Command { return XreadCommand{}; };
-  registry["ZADD"] = []() -> Command { return ZaddCommand{}; };
-  registry["ZCARD"] = []() -> Command { return ZcardCommand{}; };
-  registry["ZRANGE"] = []() -> Command { return ZrangeCommand{}; };
-  registry["ZRANK"] = []() -> Command { return ZrankCommand{}; };
-  registry["ZREM"] = []() -> Command { return ZremCommand{}; };
-  registry["ZSCORE"] = []() -> Command { return ZscoreCommand{}; };
+  registry.add("BLPOP", [] { return Command{BlpopCommand{}}; });
+  registry.add("CONFIG", [] { return Command{ConfigCommand{}}; });
+  registry.add("DISCARD", [] { return Command{DiscardCommand{}}; });
+  registry.add("ECHO", [] { return Command{EchoCommand{}}; });
+  registry.add("EXEC", [] { return Command{ExecCommand{}}; });
+  registry.add("GEOADD", [] { return Command{GeoaddCommand{}}; });
+  registry.add("GET", [] { return Command{GetCommand{}}; });
+  registry.add("INCR", [] { return Command{IncrCommand{}}; });
+  registry.add("INFO", [] { return Command{InfoCommand{}}; });
+  registry.add("KEYS", [] { return Command{KeysCommand{}}; });
+  registry.add("LLEN", [] { return Command{LlenCommand{}}; });
+  registry.add("LPOP", [] { return Command{LpopCommand{}}; });
+  registry.add("LPUSH", [] { return Command{LpushCommand{}}; });
+  registry.add("LRANGE", [] { return Command{LrangeCommand{}}; });
+  registry.add("MULTI", [] { return Command{MultiCommand{}}; });
+  registry.add("PING", [] { return Command{PingCommand{}}; });
+  registry.add("PSYNC", [] { return Command{PsyncCommand{}}; });
+  registry.add("PUBLISH", [] { return Command{PublishCommand{}}; });
+  registry.add("REPLCONF", [] { return Command{ReplConfCommand{}}; });
+  registry.add("RPUSH", [] { return Command{RpushCommand{}}; });
+  registry.add("SET", [] { return Command{SetCommand{}}; });
+  registry.add("SUBSCRIBE", [] { return Command{SubscribeCommand{}}; });
+  registry.add("TYPE", [] { return Command{TypeCommand{}}; });
+  registry.add("UNSUBSCRIBE", [] { return Command{UnsubscribeCommand{}}; });
+  registry.add("WAIT", [] { return Command{WaitCommand{}}; });
+  registry.add("XADD", [] { return Command{XaddCommand{}}; });
+  registry.add("XRANGE", [] { return Command{XrangeCommand{}}; });
+  registry.add("XREAD", [] { return Command{XreadCommand{}}; });
+  registry.add("ZADD", [] { return Command{ZaddCommand{}}; });
+  registry.add("ZCARD", [] { return Command{ZcardCommand{}}; });
+  registry.add("ZRANGE", [] { return Command{ZrangeCommand{}}; });
+  registry.add("ZRANK", [] { return Command{ZrankCommand{}}; });
+  registry.add("ZREM", [] { return Command{ZremCommand{}}; });
+  registry.add("ZSCORE", [] { return Command{ZscoreCommand{}}; });
 }
 
 std::pair<Command, std::vector<RespValue>> parseCommand(std::istream &in_stream,
@@ -173,12 +173,12 @@ std::pair<Command, std::vector<RespValue>> parseCommand(std::istream &in_stream,
         std::to_string(static_cast<int>(command_name_val.getType())));
   }
   auto cmd_name = getStringValue(command_name_val);
-  auto itr = context.getCommandRegistry().find(cmd_name);
-  if (itr == context.getCommandRegistry().end()) {
+  auto cmd_opt = context.getCommandRegistry().get(cmd_name);
+  if (!cmd_opt) {
     throw std::runtime_error("Command parsing: Unsupported command '" +
                              cmd_name + "'");
   }
-  const Command command = itr->second();
+  const Command command = *cmd_opt;
   command_args.erase(command_args.begin());
   return {command, std::move(command_args)};
 }

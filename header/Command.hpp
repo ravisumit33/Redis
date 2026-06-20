@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Registry.hpp"
 #include "RespType.hpp"
 #include "commands/BlpopCommand.hpp"
 #include "commands/ConfigCommand.hpp"
@@ -38,7 +39,6 @@
 #include <istream>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -72,7 +72,7 @@ bool isControlCommand(const Command &cmd);
 bool isSubscribedModeCommand(const Command &cmd);
 std::string_view getCommandName(const Command &cmd);
 
-using CommandRegistry = std::unordered_map<std::string, Command (*)()>;
+using CommandRegistry = Registry<std::string, Command>;
 void registerCommands(CommandRegistry &registry);
 
 std::pair<Command, std::vector<RespValue>> parseCommand(std::istream &in_stream,
