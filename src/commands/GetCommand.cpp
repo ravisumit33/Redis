@@ -1,9 +1,9 @@
 #include "commands/GetCommand.hpp"
-#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "redis_store/values/StringValue.hpp"
+#include <variant>
+#include <vector>
 
 std::vector<RespValue> GetCommand::doExecute(const std::vector<RespValue> &args,
                                              RedisStore &store) {
@@ -23,16 +23,4 @@ std::vector<RespValue> GetCommand::doExecute(const std::vector<RespValue> &args,
   }
   result.emplace_back(RespBulkString(string_val->getValue()));
   return result;
-}
-
-std::vector<RespValue>
-GetCommand::executeOnImpl(const std::vector<RespValue> &args,
-                          ClientConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
-}
-
-std::vector<RespValue>
-GetCommand::executeOnImpl(const std::vector<RespValue> &args,
-                          ServerConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
 }

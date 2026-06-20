@@ -1,14 +1,14 @@
 #include "commands/IncrCommand.hpp"
-#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "redis_store/values/StringValue.hpp"
+#include <cstdint>
 #include <string>
+#include <variant>
+#include <vector>
 
 std::vector<RespValue>
-IncrCommand::doExecute(const std::vector<RespValue> &args,
-                       RedisStore &store) {
+IncrCommand::doExecute(const std::vector<RespValue> &args, RedisStore &store) {
   std::vector<RespValue> result;
   auto store_key = getStringValue(args.at(0));
 
@@ -37,16 +37,4 @@ IncrCommand::doExecute(const std::vector<RespValue> &args,
   store.setString(store_key, std::to_string(int_val));
   result.emplace_back(RespInt(int_val));
   return result;
-}
-
-std::vector<RespValue>
-IncrCommand::executeOnImpl(const std::vector<RespValue> &args,
-                           ClientConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
-}
-
-std::vector<RespValue>
-IncrCommand::executeOnImpl(const std::vector<RespValue> &args,
-                           ServerConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
 }

@@ -3,15 +3,17 @@
 #include "Command.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
+#include "commands/ReplConfCommand.hpp"
 #include "utils/SocketUtils.hpp"
-#include "utils/genericUtils.hpp"
 #include <algorithm>
 #include <cctype>
 #include <exception>
 #include <iostream>
-#include <ranges>
 #include <sstream>
 #include <string>
+#include <utility>
+#include <variant>
+#include <vector>
 
 ClientConnection::~ClientConnection() {
   if (m_is_slave) {
@@ -27,11 +29,11 @@ void ClientConnection::addAsSlave() {
 }
 
 void ClientConnection::handleSubscribedModeError(const Command &command) {
-  std::string command_type = Command::getTypeStr(command.getType());
+  std::string command_type(getCommandName(command));
   std::ranges::transform(command_type, command_type.begin(),
                          [](unsigned char chr) { return std::tolower(chr); });
-  RespError resp_error("Can't execute '" + command_type +
-                       "' in subscribed mode");
+  const RespError resp_error("Can't execute '" + command_type +
+                             "' in subscribed mode");
   SocketUtils::writeToSocket(getSocketFd(), resp_error.serialize());
 }
 
@@ -40,7 +42,7 @@ void ClientConnection::checkAndRegisterSlave(
   if (!getContext().getConfig().isMaster()) {
     return;
   }
-  if (command.getType() != Command::Type::REPLCONF) {
+  if (!std::holds_alternative<ReplConfCommand>(command)) {
     return;
   }
   auto first_arg = getStringValue(args.at(0));
@@ -51,31 +53,31 @@ void ClientConnection::checkAndRegisterSlave(
   }
 }
 
-void ClientConnection::processCommand(std::unique_ptr<Command> command,
+void ClientConnection::processCommand(Command command,
                                       std::vector<RespValue> args,
                                       const std::string &raw_data) {
-  if (isInSubscribedMode() && !command->isSubscribedModeCommand()) {
-    handleSubscribedModeError(*command);
+  if (isInSubscribedMode() && !isSubscribedModeCommand(command)) {
+    handleSubscribedModeError(command);
     return;
   }
 
-  if (isInTransaction() && !command->isControlCommand()) {
-    queueCommand(std::move(command), std::move(args));
-    RespString resp("QUEUED");
+  if (isInTransaction() && !isControlCommand(command)) {
+    queueCommand(command, std::move(args));
+    const RespString resp("QUEUED");
     SocketUtils::writeToSocket(getSocketFd(), resp.serialize());
     return;
   }
 
-  checkAndRegisterSlave(*command, args);
+  checkAndRegisterSlave(command, args);
 
-  auto responses = command->execute(args, *this);
+  auto responses = executeCommand(command, args, *this);
   std::string resp;
   for (const auto &response : responses) {
     resp += response.serialize();
   }
   SocketUtils::writeToSocket(getSocketFd(), resp);
 
-  if (getContext().getConfig().isMaster() && command->isWriteCommand()) {
+  if (getContext().getConfig().isMaster() && isWriteCommand(command)) {
     auto &master_state = getContext().getReplicationManager().master();
     master_state.updateReplOffset(raw_data.size());
     master_state.propagateToSlave(raw_data);
@@ -85,7 +87,7 @@ void ClientConnection::processCommand(std::unique_ptr<Command> command,
 void ClientConnection::handleConnection() {
   try {
     while (true) {
-      std::string data = SocketUtils::readFromSocket(getSocketFd());
+      const std::string data = SocketUtils::readFromSocket(getSocketFd());
       if (data.empty()) {
         std::cout << "Client disconnected gracefully [fd=" << getSocketFd()
                   << "]" << '\n';
@@ -99,11 +101,11 @@ void ClientConnection::handleConnection() {
       while (socket_data.peek() != std::char_traits<char>::eof()) {
         try {
           auto [command, args] = parseCommand(socket_data, getContext());
-          processCommand(std::move(command), std::move(args), data);
+          processCommand(command, std::move(args), data);
         } catch (const std::exception &ex) {
           std::cerr << "Command execution error [fd=" << getSocketFd()
                     << "]: " << ex.what() << '\n';
-          RespError errResponse(ex.what());
+          const RespError errResponse(ex.what());
           SocketUtils::writeToSocket(getSocketFd(), errResponse.serialize());
         }
       }
@@ -116,8 +118,8 @@ void ClientConnection::handleConnection() {
 
 RespValue ClientConnection::executeTransaction() {
   RespArray resp_array;
-  for (const auto &[cmd, args] : m_queued_commands) {
-    auto result = cmd->execute(args, *this);
+  for (auto &[cmd, args] : m_queued_commands) {
+    auto result = executeCommand(cmd, args, *this);
     for (auto &res : result) {
       resp_array.add(std::move(res));
     }

@@ -2,10 +2,12 @@
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
+#include <utility>
+#include <vector>
 
 std::vector<RespValue>
-PingCommand::executeOnImpl(const std::vector<RespValue> & /*args*/,
-                           ClientConnection &connection) {
+PingCommand::execute(const std::vector<RespValue> & /*args*/,
+                     ClientConnection &connection) {
   std::vector<RespValue> result;
   if (connection.isInSubscribedMode()) {
     RespArray resp_array;
@@ -18,8 +20,8 @@ PingCommand::executeOnImpl(const std::vector<RespValue> & /*args*/,
 }
 
 std::vector<RespValue>
-PingCommand::executeOnImpl(const std::vector<RespValue> & /*args*/,
-                           ServerConnection & /*connection*/) {
+PingCommand::execute(const std::vector<RespValue> & /*args*/,
+                     ServerConnection & /*connection*/) {
   std::vector<RespValue> result;
   result.emplace_back(RespString("PONG"));
   return result;

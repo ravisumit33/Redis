@@ -1,17 +1,19 @@
 #include "commands/ZrangeCommand.hpp"
-#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "redis_store/values/SetValue.hpp"
+#include <string>
+#include <utility>
+#include <variant>
+#include <vector>
 
 std::vector<RespValue>
 ZrangeCommand::doExecute(const std::vector<RespValue> &args,
                          RedisStore &store) {
   std::vector<RespValue> result;
   auto store_key = getStringValue(args.at(0));
-  int start_idx = std::stoi(getStringValue(args.at(1)));
-  int end_idx = std::stoi(getStringValue(args.at(2)));
+  const int start_idx = std::stoi(getStringValue(args.at(1)));
+  const int end_idx = std::stoi(getStringValue(args.at(2)));
   auto val = store.get(store_key);
   RespArray resp_array;
   if (val) {
@@ -25,16 +27,4 @@ ZrangeCommand::doExecute(const std::vector<RespValue> &args,
   }
   result.emplace_back(std::move(resp_array));
   return result;
-}
-
-std::vector<RespValue>
-ZrangeCommand::executeOnImpl(const std::vector<RespValue> &args,
-                             ClientConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
-}
-
-std::vector<RespValue>
-ZrangeCommand::executeOnImpl(const std::vector<RespValue> &args,
-                             ServerConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
 }

@@ -2,9 +2,13 @@
 #include "AppConfig.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
+#include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <iostream>
+#include <string>
+#include <utility>
+#include <vector>
 
 std::vector<RespValue>
 ReplConfCommand::doExecute(const std::vector<RespValue> &args,
@@ -39,27 +43,11 @@ ReplConfCommand::doExecute(const std::vector<RespValue> &args,
     }
     RespArray resp_array;
     auto &slave_state = repl.slave();
-    std::size_t bytes_processed = slave_state.getBytesProcessed();
+    const std::size_t bytes_processed = slave_state.getBytesProcessed();
     resp_array.add(RespBulkString("REPLCONF"))
         .add(RespBulkString("ACK"))
         .add(RespBulkString(std::to_string(bytes_processed)));
     result.emplace_back(std::move(resp_array));
   }
   return result;
-}
-
-std::vector<RespValue>
-ReplConfCommand::executeOnImpl(const std::vector<RespValue> &args,
-                               ClientConnection &connection) {
-  return doExecute(args, connection.getContext().getConfig(),
-                   connection.getContext().getReplicationManager(),
-                   connection.getSocketFd());
-}
-
-std::vector<RespValue>
-ReplConfCommand::executeOnImpl(const std::vector<RespValue> &args,
-                               ServerConnection &connection) {
-  return doExecute(args, connection.getContext().getConfig(),
-                   connection.getContext().getReplicationManager(),
-                   connection.getSocketFd());
 }

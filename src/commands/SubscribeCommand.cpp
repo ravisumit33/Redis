@@ -1,13 +1,18 @@
 #include "commands/SubscribeCommand.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
+#include <cstddef>
+#include <cstdint>
+#include <utility>
+#include <vector>
 
 std::vector<RespValue>
-SubscribeCommand::executeOnImpl(const std::vector<RespValue> &args,
-                                ClientConnection &connection) {
+SubscribeCommand::execute(const std::vector<RespValue> &args,
+                          ClientConnection &connection) {
   std::vector<RespValue> result;
   auto channel_name = getStringValue(args.at(0));
-  std::size_t subscription_count = connection.subscribeToChannel(channel_name);
+  const std::size_t subscription_count =
+      connection.subscribeToChannel(channel_name);
   RespArray resp_array;
   resp_array.add(RespBulkString("subscribe"))
       .add(RespBulkString(channel_name))

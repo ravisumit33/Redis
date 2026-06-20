@@ -1,17 +1,22 @@
 #pragma once
 
-#include "Command.hpp"
+#include "RespType.hpp"
+#include <string_view>
+#include <vector>
 
-class MultiCommand : public Command {
+class ClientConnection;
+
+class MultiCommand {
 public:
-  MultiCommand() : Command(Type::MULTI) {}
+  static constexpr std::string_view name = "MULTI";
+  static constexpr bool is_write = false;
+  static constexpr bool is_control = true;
+  static constexpr bool is_subscribed_mode = false;
 
-protected:
-  std::vector<RespValue> executeOnImpl(const std::vector<RespValue> &args,
-                                       ClientConnection &connection) override;
-
-private:
-  bool validateArgsImpl(const std::vector<RespValue> &args) override {
-    return args.size() == 0;
+  static bool validateArgs(const std::vector<RespValue> &args) {
+    return args.empty();
   }
+
+  static std::vector<RespValue> execute(const std::vector<RespValue> &args,
+                                        ClientConnection &conn);
 };

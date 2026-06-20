@@ -1,17 +1,22 @@
 #pragma once
 
-#include "Command.hpp"
+#include "RespType.hpp"
+#include <string_view>
+#include <vector>
 
-class SubscribeCommand : public Command {
+class ClientConnection;
+
+class SubscribeCommand {
 public:
-  SubscribeCommand() : Command(Type::SUBSCRIBE) {}
+  static constexpr std::string_view name = "SUBSCRIBE";
+  static constexpr bool is_write = false;
+  static constexpr bool is_control = false;
+  static constexpr bool is_subscribed_mode = true;
 
-protected:
-  std::vector<RespValue> executeOnImpl(const std::vector<RespValue> &args,
-                                       ClientConnection &connection) override;
-
-private:
-  bool validateArgsImpl(const std::vector<RespValue> &args) override {
+  static bool validateArgs(const std::vector<RespValue> &args) {
     return args.size() == 1;
   }
+
+  static std::vector<RespValue> execute(const std::vector<RespValue> &args,
+                                        ClientConnection &conn);
 };

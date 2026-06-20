@@ -1,12 +1,14 @@
 #include "commands/ZscoreCommand.hpp"
-#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "redis_store/values/SetValue.hpp"
 #include <cstdint>
 #include <iomanip>
+#include <ios>
 #include <sstream>
+#include <string>
+#include <variant>
+#include <vector>
 
 std::vector<RespValue>
 ZscoreCommand::doExecute(const std::vector<RespValue> &args,
@@ -36,16 +38,4 @@ ZscoreCommand::doExecute(const std::vector<RespValue> &args,
     result.emplace_back(RespBulkString());
   }
   return result;
-}
-
-std::vector<RespValue>
-ZscoreCommand::executeOnImpl(const std::vector<RespValue> &args,
-                             ClientConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
-}
-
-std::vector<RespValue>
-ZscoreCommand::executeOnImpl(const std::vector<RespValue> &args,
-                             ServerConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
 }

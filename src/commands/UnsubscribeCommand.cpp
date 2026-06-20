@@ -1,13 +1,17 @@
 #include "commands/UnsubscribeCommand.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
+#include <cstddef>
+#include <cstdint>
+#include <utility>
+#include <vector>
 
 std::vector<RespValue>
-UnsubscribeCommand::executeOnImpl(const std::vector<RespValue> &args,
-                                  ClientConnection &connection) {
+UnsubscribeCommand::execute(const std::vector<RespValue> &args,
+                            ClientConnection &connection) {
   std::vector<RespValue> result;
   auto channel_name = getStringValue(args.at(0));
-  std::size_t subscription_count =
+  const std::size_t subscription_count =
       connection.unsubscribeFromChannel(channel_name);
   RespArray resp_array;
   resp_array.add(RespBulkString("unsubscribe"))

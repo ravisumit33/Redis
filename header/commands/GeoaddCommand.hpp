@@ -1,22 +1,26 @@
 #pragma once
 
-#include "Command.hpp"
+#include "RespType.hpp"
+#include <string_view>
+#include <vector>
 
-class GeoaddCommand : public Command {
+class GeoaddCommand {
 public:
-  GeoaddCommand() : Command(Type::GEOADD) {}
+  static constexpr std::string_view name = "GEOADD";
+  static constexpr bool is_write = true;
+  static constexpr bool is_control = false;
+  static constexpr bool is_subscribed_mode = false;
 
-protected:
-  std::vector<RespValue> executeOnImpl(const std::vector<RespValue> &args,
-                                       ClientConnection &connection) override;
+  static bool validateArgs(const std::vector<RespValue> &args) {
+    return args.size() == 4;
+  }
 
-  std::vector<RespValue> executeOnImpl(const std::vector<RespValue> &args,
-                                       ServerConnection &connection) override;
+  template <typename Conn>
+  std::vector<RespValue> execute(const std::vector<RespValue> &args,
+                                 Conn & /*conn*/) const {
+    return doExecute(args);
+  }
 
 private:
   static std::vector<RespValue> doExecute(const std::vector<RespValue> &args);
-
-  bool validateArgsImpl(const std::vector<RespValue> &args) override {
-    return args.size() == 4;
-  }
 };

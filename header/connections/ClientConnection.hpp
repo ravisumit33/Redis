@@ -44,8 +44,8 @@ public:
 
   bool isInSubscribedMode() const { return m_in_subscribed_mode; }
 
-  void queueCommand(std::unique_ptr<Command> cmd, std::vector<RespValue> args) {
-    m_queued_commands.emplace_back(std::move(cmd), std::move(args));
+  void queueCommand(Command cmd, std::vector<RespValue> args) {
+    m_queued_commands.emplace_back(cmd, std::move(args));
   }
 
   RespValue executeTransaction();
@@ -81,8 +81,8 @@ public:
 
 private:
   void addAsSlave();
-  void processCommand(std::unique_ptr<Command> command,
-                      std::vector<RespValue> args, const std::string &raw_data);
+  void processCommand(Command command, std::vector<RespValue> args,
+                      const std::string &raw_data);
   void handleSubscribedModeError(const Command &command);
   void checkAndRegisterSlave(const Command &command,
                              const std::vector<RespValue> &args);
@@ -93,8 +93,7 @@ private:
 
   bool m_in_subscribed_mode = false;
 
-  std::vector<std::pair<std::unique_ptr<Command>, std::vector<RespValue>>>
-      m_queued_commands;
+  std::vector<std::pair<Command, std::vector<RespValue>>> m_queued_commands;
 
   std::unordered_map<std::string, std::shared_ptr<RedisSubscriber>>
       m_channel_subscriptions;

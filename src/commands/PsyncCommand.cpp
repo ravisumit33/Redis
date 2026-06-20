@@ -1,10 +1,10 @@
 #include "commands/PsyncCommand.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
 #include "utils/genericUtils.hpp"
+#include <cstdint>
 #include <string>
+#include <vector>
 
 std::vector<RespValue>
 PsyncCommand::doExecute(const std::vector<RespValue> &args,
@@ -23,8 +23,8 @@ PsyncCommand::doExecute(const std::vector<RespValue> &args,
   }
 
   auto &master_state = repl.master();
-  std::string master_replid = master_state.getReplId();
-  uint64_t master_repl_offset = master_state.getReplOffset();
+  const std::string master_replid = master_state.getReplId();
+  const uint64_t master_repl_offset = master_state.getReplOffset();
   result.emplace_back(RespString("FULLRESYNC " + master_replid + " " +
                                  std::to_string(master_repl_offset)));
 
@@ -36,16 +36,4 @@ PsyncCommand::doExecute(const std::vector<RespValue> &args,
   const std::string empty_rdb_binary = hexToBinary(empty_rdb_hex);
   result.emplace_back(RespBulkString(empty_rdb_binary, false));
   return result;
-}
-
-std::vector<RespValue>
-PsyncCommand::executeOnImpl(const std::vector<RespValue> &args,
-                            ClientConnection &connection) {
-  return doExecute(args, connection.getContext().getReplicationManager());
-}
-
-std::vector<RespValue>
-PsyncCommand::executeOnImpl(const std::vector<RespValue> &args,
-                            ServerConnection &connection) {
-  return doExecute(args, connection.getContext().getReplicationManager());
 }

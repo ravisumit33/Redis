@@ -1,10 +1,11 @@
 #include "utils/genericUtils.hpp"
-#include "AppContext.hpp"
-#include "RespTypeParser.hpp"
+#include "RespType.hpp"
+#include "redis_store/values/StreamValue.hpp"
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <iomanip>
-#include <istream>
-#include <memory>
+#include <ios>
 #include <optional>
 #include <random>
 #include <sstream>
@@ -36,8 +37,8 @@ std::string hexToBinary(const std::string &hex) {
   std::string result;
   result.reserve(hex.size() / 2);
   for (size_t i = 0; i < hex.size(); i += 2) {
-    uint8_t high = hexCharToInt(hex[i]);
-    uint8_t low = hexCharToInt(hex[i + 1]);
+    const uint8_t high = hexCharToInt(hex[i]);
+    const uint8_t low = hexCharToInt(hex[i + 1]);
     result.push_back(static_cast<char>((high << 4) | low));
   }
   return result;
@@ -58,49 +59,9 @@ std::string generateRandomHexId() {
   return oss.str();
 }
 
-std::pair<std::unique_ptr<Command>, std::vector<RespValue>>
-parseCommand(std::istream &in_stream, AppContext &context) {
-  char type{};
-  in_stream.get(type);
-  if (!in_stream) {
-    throw std::runtime_error(
-        "Command parsing: No RESP type found (empty stream)");
-  }
-
-  if (type != '*') {
-    throw std::runtime_error(
-        "Command parsing: Expected array type '*' but got '" +
-        std::string(1, type) + "' (commands must be arrays)");
-  }
-
-  RespArray cmd_arr = parseRespArray(in_stream);
-  auto command_args = cmd_arr.release();
-  if (command_args.empty()) {
-    throw std::runtime_error("Command parsing: Empty command array received");
-  }
-
-  auto &command_name_val = command_args.at(0);
-  if (command_name_val.getType() != RespType::BULK_STRING) {
-    throw std::runtime_error(
-        "Command parsing: Command name must be bulk string, got type " +
-        std::to_string(static_cast<int>(command_name_val.getType())));
-  }
-
-  auto cmd_name = getStringValue(command_name_val);
-
-  auto command = context.getCommandRegistry().get(cmd_name);
-  if (!command) {
-    throw std::runtime_error("Command parsing: Unsupported command '" +
-                             cmd_name + "'");
-  }
-  command_args.erase(command_args.begin());
-
-  return {std::move(command), std::move(command_args)};
-}
-
 std::array<uint64_t, 2> parseStreamEntryId(const std::string &entry_id) {
-  std::size_t hyphen_pos = entry_id.find('-');
-  uint64_t timestamp = std::stoull(entry_id.substr(0, hyphen_pos));
+  const std::size_t hyphen_pos = entry_id.find('-');
+  const uint64_t timestamp = std::stoull(entry_id.substr(0, hyphen_pos));
   uint64_t sequence = 0;
   if (hyphen_pos != std::string::npos) {
     sequence = std::stoull(entry_id.substr(hyphen_pos + 1));
@@ -111,7 +72,7 @@ std::array<uint64_t, 2> parseStreamEntryId(const std::string &entry_id) {
 std::array<std::optional<uint64_t>, 2>
 parsePartialStreamEntryId(const std::string &entry_id) {
   using EntryIdPart = std::variant<uint64_t, std::string>;
-  std::size_t hyphen_pos = entry_id.find('-');
+  const std::size_t hyphen_pos = entry_id.find('-');
   if (hyphen_pos == std::string::npos) {
     throw std::runtime_error("Invalid entry_id for stream");
   }

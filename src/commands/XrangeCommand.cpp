@@ -1,10 +1,11 @@
 #include "commands/XrangeCommand.hpp"
-#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "redis_store/values/StreamValue.hpp"
 #include "utils/genericUtils.hpp"
+#include <utility>
+#include <variant>
+#include <vector>
 
 std::vector<RespValue>
 XrangeCommand::doExecute(const std::vector<RespValue> &args,
@@ -31,16 +32,4 @@ XrangeCommand::doExecute(const std::vector<RespValue> &args,
       store_key, stream_entry_id_start, stream_entry_id_end);
   result.emplace_back(serializeStreamEntries(std::move(stream_entries)));
   return result;
-}
-
-std::vector<RespValue>
-XrangeCommand::executeOnImpl(const std::vector<RespValue> &args,
-                             ClientConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
-}
-
-std::vector<RespValue>
-XrangeCommand::executeOnImpl(const std::vector<RespValue> &args,
-                             ServerConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
 }

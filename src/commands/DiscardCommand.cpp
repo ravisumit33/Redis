@@ -1,10 +1,11 @@
 #include "commands/DiscardCommand.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
+#include <vector>
 
 std::vector<RespValue>
-DiscardCommand::executeOnImpl(const std::vector<RespValue> & /*args*/,
-                              ClientConnection &connection) {
+DiscardCommand::execute(const std::vector<RespValue> & /*args*/,
+                        ClientConnection &connection) {
   std::vector<RespValue> result;
   if (!connection.isInTransaction()) {
     result.emplace_back(RespError("DISCARD without MULTI"));

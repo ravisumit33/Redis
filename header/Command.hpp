@@ -1,118 +1,79 @@
 #pragma once
 
-#include "Registry.hpp"
 #include "RespType.hpp"
-#include <cstdint>
+#include "commands/BlpopCommand.hpp"
+#include "commands/ConfigCommand.hpp"
+#include "commands/DiscardCommand.hpp"
+#include "commands/EchoCommand.hpp"
+#include "commands/ExecCommand.hpp"
+#include "commands/GeoaddCommand.hpp"
+#include "commands/GetCommand.hpp"
+#include "commands/IncrCommand.hpp"
+#include "commands/InfoCommand.hpp"
+#include "commands/KeysCommand.hpp"
+#include "commands/LlenCommand.hpp"
+#include "commands/LpopCommand.hpp"
+#include "commands/LpushCommand.hpp"
+#include "commands/LrangeCommand.hpp"
+#include "commands/MultiCommand.hpp"
+#include "commands/PingCommand.hpp"
+#include "commands/PsyncCommand.hpp"
+#include "commands/PublishCommand.hpp"
+#include "commands/ReplConfCommand.hpp"
+#include "commands/RpushCommand.hpp"
+#include "commands/SetCommand.hpp"
+#include "commands/SubscribeCommand.hpp"
+#include "commands/TypeCommand.hpp"
+#include "commands/UnsubscribeCommand.hpp"
+#include "commands/WaitCommand.hpp"
+#include "commands/XaddCommand.hpp"
+#include "commands/XrangeCommand.hpp"
+#include "commands/XreadCommand.hpp"
+#include "commands/ZaddCommand.hpp"
+#include "commands/ZcardCommand.hpp"
+#include "commands/ZrangeCommand.hpp"
+#include "commands/ZrankCommand.hpp"
+#include "commands/ZremCommand.hpp"
+#include "commands/ZscoreCommand.hpp"
+#include <istream>
 #include <string>
+#include <string_view>
+#include <unordered_map>
+#include <variant>
 #include <vector>
 
 class ClientConnection;
 class ServerConnection;
+class AppContext;
 
-class Command {
-public:
-  virtual ~Command() = default;
-  Command(const Command &) = delete;
-  Command &operator=(const Command &) = delete;
-  Command(Command &&) = delete;
-  Command &operator=(Command &&) = delete;
+using Command = std::variant<
+    BlpopCommand, ConfigCommand, DiscardCommand, EchoCommand, ExecCommand,
+    GeoaddCommand, GetCommand, IncrCommand, InfoCommand, KeysCommand,
+    LlenCommand, LpopCommand, LpushCommand, LrangeCommand, MultiCommand,
+    PingCommand, PsyncCommand, PublishCommand, ReplConfCommand, RpushCommand,
+    SetCommand, SubscribeCommand, TypeCommand, UnsubscribeCommand, WaitCommand,
+    XaddCommand, XrangeCommand, XreadCommand, ZaddCommand, ZcardCommand,
+    ZrangeCommand, ZrankCommand, ZremCommand, ZscoreCommand>;
 
-  enum class Type : std::uint8_t {
-    ECHO,
-    PING,
-    SET,
-    GET,
-    INFO,
-    REPLCONF,
-    PSYNC,
-    WAIT,
-    TYPE,
-    XADD,
-    XRANGE,
-    XREAD,
-    INCR,
-    MULTI,
-    EXEC,
-    DISCARD,
-    CONFIG,
-    KEYS,
-    RPUSH,
-    LPUSH,
-    LLEN,
-    LPOP,
-    LRANGE,
-    BLPOP,
-    SUBSCRIBE,
-    UNSUBSCRIBE,
-    PUBLISH,
-    ZADD,
-    ZRANK,
-    ZRANGE,
-    ZCARD,
-    ZSCORE,
-    ZREM,
-    GEOADD,
-  };
+template <typename Cmd, typename Conn>
+concept CommandFor =
+    requires(const Cmd &cmd, const std::vector<RespValue> &args, Conn &n) {
+      { cmd.execute(args, n) } -> std::same_as<std::vector<RespValue>>;
+    };
 
-  std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                 ClientConnection &connection) {
-    bool args_valid = validateArgs(args);
-    if (!args_valid) {
-      std::vector<RespValue> result;
-      result.emplace_back(RespError("Invalid args"));
-      return result;
-    }
-    return executeOnImpl(args, connection);
-  }
+std::vector<RespValue> executeCommand(Command &cmd,
+                                      const std::vector<RespValue> &args,
+                                      ClientConnection &conn);
+std::vector<RespValue> executeCommand(Command &cmd,
+                                      const std::vector<RespValue> &args,
+                                      ServerConnection &conn);
+bool isWriteCommand(const Command &cmd);
+bool isControlCommand(const Command &cmd);
+bool isSubscribedModeCommand(const Command &cmd);
+std::string_view getCommandName(const Command &cmd);
 
-  std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                 ServerConnection &connection) {
-    bool args_valid = validateArgs(args);
-    if (!args_valid) {
-      std::vector<RespValue> result;
-      result.emplace_back(RespError("Invalid args"));
-      return result;
-    }
-    return executeOnImpl(args, connection);
-  }
-
-  Type getType() const { return m_type; }
-
-  static std::string getTypeStr(Type type);
-
-  bool isWriteCommand() const;
-
-  bool isControlCommand() const;
-
-  bool isSubscribedModeCommand() const;
-
-protected:
-  Command(Type cmd_type) : m_type(cmd_type) {}
-
-  virtual std::vector<RespValue>
-  executeOnImpl(const std::vector<RespValue> &args,
-                ClientConnection &connection);
-
-  virtual std::vector<RespValue>
-  executeOnImpl(const std::vector<RespValue> &args,
-                ServerConnection &connection);
-
-private:
-  bool validateArgs(const std::vector<RespValue> &args) {
-    size_t nargs = args.size();
-    for (size_t i = 0; i < nargs; ++i) {
-      if (args[i].getType() != RespType::BULK_STRING) {
-        return false;
-      }
-    }
-    return validateArgsImpl(args);
-  }
-
-  virtual bool validateArgsImpl(const std::vector<RespValue> &args) = 0;
-
-  Type m_type;
-};
-
-using CommandRegistry = Registry<std::string, Command>;
-
+using CommandRegistry = std::unordered_map<std::string, Command (*)()>;
 void registerCommands(CommandRegistry &registry);
+
+std::pair<Command, std::vector<RespValue>> parseCommand(std::istream &in_stream,
+                                                        AppContext &context);

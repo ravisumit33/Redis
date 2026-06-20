@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Command.hpp"
 #include "RespType.hpp"
 #include "redis_store/values/StreamValue.hpp"
 #include <algorithm>
@@ -8,23 +7,17 @@
 #include <bit>
 #include <cstdint>
 #include <istream>
-#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
-class AppContext;
-
 uint8_t hexCharToInt(char hex_char);
 
 std::string hexToBinary(const std::string &hex);
 
 std::string generateRandomHexId();
-
-std::pair<std::unique_ptr<Command>, std::vector<RespValue>>
-parseCommand(std::istream &in_stream, AppContext &context);
 
 std::array<std::optional<uint64_t>, 2>
 parsePartialStreamEntryId(const std::string &entry_id);
@@ -36,7 +29,7 @@ RespValue serializeStreamEntries(
         entries);
 
 inline uint8_t peekByte(std::istream &in_stream) {
-  int top_char = in_stream.peek();
+  const int top_char = in_stream.peek();
   if (top_char == std::char_traits<char>::eof()) {
     if (in_stream.eof()) {
       throw std::runtime_error(

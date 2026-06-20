@@ -1,20 +1,25 @@
 #pragma once
 
-#include "Command.hpp"
+#include "RespType.hpp"
+#include <string_view>
+#include <vector>
 
-class PingCommand : public Command {
+class ClientConnection;
+class ServerConnection;
+
+class PingCommand {
 public:
-  PingCommand() : Command(Type::PING) {}
+  static constexpr std::string_view name = "PING";
+  static constexpr bool is_write = false;
+  static constexpr bool is_control = false;
+  static constexpr bool is_subscribed_mode = true;
 
-protected:
-  std::vector<RespValue> executeOnImpl(const std::vector<RespValue> &args,
-                                       ClientConnection &connection) override;
-
-  std::vector<RespValue> executeOnImpl(const std::vector<RespValue> &args,
-                                       ServerConnection &connection) override;
-
-private:
-  bool validateArgsImpl(const std::vector<RespValue> &args) override {
-    return args.size() == 0;
+  static bool validateArgs(const std::vector<RespValue> &args) {
+    return args.empty();
   }
+
+  static std::vector<RespValue> execute(const std::vector<RespValue> &args,
+                                        ClientConnection &conn);
+  static std::vector<RespValue> execute(const std::vector<RespValue> &args,
+                                        ServerConnection &conn);
 };

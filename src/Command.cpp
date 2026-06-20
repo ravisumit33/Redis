@@ -1,12 +1,7 @@
 #include "Command.hpp"
-#include <memory>
-#include <stdexcept>
-#include <unordered_map>
-#include <unordered_set>
-
-class ClientConnection;
-class ServerConnection;
-
+#include "AppContext.hpp"
+#include "RespType.hpp"
+#include "RespTypeParser.hpp"
 #include "commands/BlpopCommand.hpp"
 #include "commands/ConfigCommand.hpp"
 #include "commands/DiscardCommand.hpp"
@@ -41,150 +36,149 @@ class ServerConnection;
 #include "commands/ZrankCommand.hpp"
 #include "commands/ZremCommand.hpp"
 #include "commands/ZscoreCommand.hpp"
+#include "connections/ClientConnection.hpp"
+#include "connections/ServerConnection.hpp"
+#include <istream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
 
-bool Command::isWriteCommand() const {
-  static const std::unordered_set<Type> write_commands = {Type::SET};
-  return write_commands.contains(getType());
-}
-
-bool Command::isControlCommand() const {
-  static const std::unordered_set<Type> control_commands = {Type::EXEC,
-                                                            Type::DISCARD};
-  return control_commands.contains(getType());
-}
-
-bool Command::isSubscribedModeCommand() const {
-  static const std::unordered_set<Type> subscribed_mode_commands = {
-      Type::SUBSCRIBE, Type::UNSUBSCRIBE, Type::PING};
-  return subscribed_mode_commands.contains(getType());
-}
-
-std::string Command::getTypeStr(Type type) {
-  static const std::unordered_map<Type, std::string> type_strings = {
-      {Type::ECHO, "ECHO"},
-      {Type::PING, "PING"},
-      {Type::SET, "SET"},
-      {Type::GET, "GET"},
-      {Type::INFO, "INFO"},
-      {Type::REPLCONF, "REPLCONF"},
-      {Type::PSYNC, "PSYNC"},
-      {Type::WAIT, "WAIT"},
-      {Type::TYPE, "TYPE"},
-      {Type::XADD, "XADD"},
-      {Type::XRANGE, "XRANGE"},
-      {Type::XREAD, "XREAD"},
-      {Type::INCR, "INCR"},
-      {Type::MULTI, "MULTI"},
-      {Type::EXEC, "EXEC"},
-      {Type::DISCARD, "DISCARD"},
-      {Type::CONFIG, "CONFIG"},
-      {Type::KEYS, "KEYS"},
-      {Type::RPUSH, "RPUSH"},
-      {Type::LPUSH, "LPUSH"},
-      {Type::LLEN, "LLEN"},
-      {Type::LPOP, "LPOP"},
-      {Type::LRANGE, "LRANGE"},
-      {Type::BLPOP, "BLPOP"},
-      {Type::SUBSCRIBE, "SUBSCRIBE"},
-      {Type::UNSUBSCRIBE, "UNSUBSCRIBE"},
-      {Type::PUBLISH, "PUBLISH"},
-      {Type::ZADD, "ZADD"},
-      {Type::ZRANK, "ZRANK"},
-      {Type::ZRANGE, "ZRANGE"},
-      {Type::ZCARD, "ZCARD"},
-      {Type::ZSCORE, "ZSCORE"},
-      {Type::ZREM, "ZREM"},
-      {Type::GEOADD, "GEOADD"},
-  };
-
-  auto itr = type_strings.find(type);
-  if (itr != type_strings.end()) {
-    return itr->second;
+namespace {
+bool validateCommandArgs(Command &cmd, const std::vector<RespValue> &args) {
+  for (const auto &arg : args) {
+    if (arg.getType() != RespType::BULK_STRING) {
+      return false;
+    }
   }
-  throw std::logic_error("Unknown type of command");
+  return std::visit([&](auto &cmd) { return cmd.validateArgs(args); }, cmd);
+}
+} // namespace
+
+std::vector<RespValue> executeCommand(Command &cmd,
+                                      const std::vector<RespValue> &args,
+                                      ClientConnection &conn) {
+  if (!validateCommandArgs(cmd, args)) {
+    return {RespError("Invalid args")};
+  }
+  return std::visit(
+      [&](auto &cmd) -> std::vector<RespValue> {
+        return cmd.execute(args, conn);
+      },
+      cmd);
 }
 
-std::vector<RespValue>
-Command::executeOnImpl(const std::vector<RespValue> & /*args*/,
-                       ClientConnection & /*connection*/) {
-  throw std::runtime_error("Command '" + getTypeStr(m_type) +
-                           "' not supported for client connection");
+std::vector<RespValue> executeCommand(Command &cmd,
+                                      const std::vector<RespValue> &args,
+                                      ServerConnection &conn) {
+  if (!validateCommandArgs(cmd, args)) {
+    return {RespError("Invalid args")};
+  }
+  return std::visit(
+      [&](auto &cmd_var) -> std::vector<RespValue> {
+        using T = std::decay_t<decltype(cmd_var)>;
+        if constexpr (CommandFor<T, ServerConnection>) {
+          return cmd_var.execute(args, conn);
+        } else {
+          throw std::logic_error(std::string("Command '") +
+                                 std::string(T::name) +
+                                 "' is not valid for server connection");
+        }
+      },
+      cmd);
 }
 
-std::vector<RespValue>
-Command::executeOnImpl(const std::vector<RespValue> & /*args*/,
-                       ServerConnection & /*connection*/) {
-  throw std::runtime_error("Command '" + getTypeStr(m_type) +
-                           "' not supported for server connection");
+bool isWriteCommand(const Command &cmd) {
+  return std::visit([](const auto &command) { return command.is_write; }, cmd);
+}
+
+bool isControlCommand(const Command &cmd) {
+  return std::visit([](const auto &command) { return command.is_control; },
+                    cmd);
+}
+
+bool isSubscribedModeCommand(const Command &cmd) {
+  return std::visit(
+      [](const auto &command) { return command.is_subscribed_mode; }, cmd);
+}
+
+std::string_view getCommandName(const Command &cmd) {
+  return std::visit(
+      [](const auto &command) -> std::string_view { return command.name; },
+      cmd);
 }
 
 void registerCommands(CommandRegistry &registry) {
-  registry.add(Command::getTypeStr(Command::Type::BLPOP),
-               []() { return std::make_unique<BlpopCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::CONFIG),
-               []() { return std::make_unique<ConfigCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::DISCARD),
-               []() { return std::make_unique<DiscardCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::ECHO),
-               []() { return std::make_unique<EchoCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::EXEC),
-               []() { return std::make_unique<ExecCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::GET),
-               []() { return std::make_unique<GetCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::INCR),
-               []() { return std::make_unique<IncrCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::INFO),
-               []() { return std::make_unique<InfoCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::KEYS),
-               []() { return std::make_unique<KeysCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::LLEN),
-               []() { return std::make_unique<LlenCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::LPOP),
-               []() { return std::make_unique<LpopCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::LPUSH),
-               []() { return std::make_unique<LpushCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::LRANGE),
-               []() { return std::make_unique<LrangeCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::MULTI),
-               []() { return std::make_unique<MultiCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::PING),
-               []() { return std::make_unique<PingCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::PSYNC),
-               []() { return std::make_unique<PsyncCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::PUBLISH),
-               []() { return std::make_unique<PublishCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::REPLCONF),
-               []() { return std::make_unique<ReplConfCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::RPUSH),
-               []() { return std::make_unique<RpushCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::SET),
-               []() { return std::make_unique<SetCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::SUBSCRIBE),
-               []() { return std::make_unique<SubscribeCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::TYPE),
-               []() { return std::make_unique<TypeCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::UNSUBSCRIBE),
-               []() { return std::make_unique<UnsubscribeCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::WAIT),
-               []() { return std::make_unique<WaitCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::XADD),
-               []() { return std::make_unique<XaddCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::XRANGE),
-               []() { return std::make_unique<XrangeCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::XREAD),
-               []() { return std::make_unique<XreadCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::ZADD),
-               []() { return std::make_unique<ZaddCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::ZCARD),
-               []() { return std::make_unique<ZcardCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::ZRANGE),
-               []() { return std::make_unique<ZrangeCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::ZRANK),
-               []() { return std::make_unique<ZrankCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::ZREM),
-               []() { return std::make_unique<ZremCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::ZSCORE),
-               []() { return std::make_unique<ZscoreCommand>(); });
-  registry.add(Command::getTypeStr(Command::Type::GEOADD),
-               []() { return std::make_unique<GeoaddCommand>(); });
+  registry["BLPOP"] = []() -> Command { return BlpopCommand{}; };
+  registry["CONFIG"] = []() -> Command { return ConfigCommand{}; };
+  registry["DISCARD"] = []() -> Command { return DiscardCommand{}; };
+  registry["ECHO"] = []() -> Command { return EchoCommand{}; };
+  registry["EXEC"] = []() -> Command { return ExecCommand{}; };
+  registry["GEOADD"] = []() -> Command { return GeoaddCommand{}; };
+  registry["GET"] = []() -> Command { return GetCommand{}; };
+  registry["INCR"] = []() -> Command { return IncrCommand{}; };
+  registry["INFO"] = []() -> Command { return InfoCommand{}; };
+  registry["KEYS"] = []() -> Command { return KeysCommand{}; };
+  registry["LLEN"] = []() -> Command { return LlenCommand{}; };
+  registry["LPOP"] = []() -> Command { return LpopCommand{}; };
+  registry["LPUSH"] = []() -> Command { return LpushCommand{}; };
+  registry["LRANGE"] = []() -> Command { return LrangeCommand{}; };
+  registry["MULTI"] = []() -> Command { return MultiCommand{}; };
+  registry["PING"] = []() -> Command { return PingCommand{}; };
+  registry["PSYNC"] = []() -> Command { return PsyncCommand{}; };
+  registry["PUBLISH"] = []() -> Command { return PublishCommand{}; };
+  registry["REPLCONF"] = []() -> Command { return ReplConfCommand{}; };
+  registry["RPUSH"] = []() -> Command { return RpushCommand{}; };
+  registry["SET"] = []() -> Command { return SetCommand{}; };
+  registry["SUBSCRIBE"] = []() -> Command { return SubscribeCommand{}; };
+  registry["TYPE"] = []() -> Command { return TypeCommand{}; };
+  registry["UNSUBSCRIBE"] = []() -> Command { return UnsubscribeCommand{}; };
+  registry["WAIT"] = []() -> Command { return WaitCommand{}; };
+  registry["XADD"] = []() -> Command { return XaddCommand{}; };
+  registry["XRANGE"] = []() -> Command { return XrangeCommand{}; };
+  registry["XREAD"] = []() -> Command { return XreadCommand{}; };
+  registry["ZADD"] = []() -> Command { return ZaddCommand{}; };
+  registry["ZCARD"] = []() -> Command { return ZcardCommand{}; };
+  registry["ZRANGE"] = []() -> Command { return ZrangeCommand{}; };
+  registry["ZRANK"] = []() -> Command { return ZrankCommand{}; };
+  registry["ZREM"] = []() -> Command { return ZremCommand{}; };
+  registry["ZSCORE"] = []() -> Command { return ZscoreCommand{}; };
+}
+
+std::pair<Command, std::vector<RespValue>> parseCommand(std::istream &in_stream,
+                                                        AppContext &context) {
+  char type{};
+  in_stream.get(type);
+  if (!in_stream) {
+    throw std::runtime_error(
+        "Command parsing: No RESP type found (empty stream)");
+  }
+  if (type != '*') {
+    throw std::runtime_error(
+        "Command parsing: Expected array type '*' but got '" +
+        std::string(1, type) + "' (commands must be arrays)");
+  }
+  RespArray cmd_arr = parseRespArray(in_stream);
+  auto command_args = cmd_arr.release();
+  if (command_args.empty()) {
+    throw std::runtime_error("Command parsing: Empty command array received");
+  }
+  auto &command_name_val = command_args.at(0);
+  if (command_name_val.getType() != RespType::BULK_STRING) {
+    throw std::runtime_error(
+        "Command parsing: Command name must be bulk string, got type " +
+        std::to_string(static_cast<int>(command_name_val.getType())));
+  }
+  auto cmd_name = getStringValue(command_name_val);
+  auto itr = context.getCommandRegistry().find(cmd_name);
+  if (itr == context.getCommandRegistry().end()) {
+    throw std::runtime_error("Command parsing: Unsupported command '" +
+                             cmd_name + "'");
+  }
+  const Command command = itr->second();
+  command_args.erase(command_args.begin());
+  return {command, std::move(command_args)};
 }

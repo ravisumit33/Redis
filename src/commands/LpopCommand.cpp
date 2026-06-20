@@ -1,12 +1,12 @@
 #include "commands/LpopCommand.hpp"
-#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
+#include "redis_store/RedisStore.hpp"
+#include <string>
+#include <utility>
+#include <vector>
 
 std::vector<RespValue>
-LpopCommand::doExecute(const std::vector<RespValue> &args,
-                       RedisStore &store) {
+LpopCommand::doExecute(const std::vector<RespValue> &args, RedisStore &store) {
   std::vector<RespValue> result;
   auto store_key = getStringValue(args.at(0));
   unsigned el_count = 1;
@@ -30,16 +30,4 @@ LpopCommand::doExecute(const std::vector<RespValue> &args,
   }
   result.emplace_back(std::move(resp_array));
   return result;
-}
-
-std::vector<RespValue>
-LpopCommand::executeOnImpl(const std::vector<RespValue> &args,
-                           ClientConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
-}
-
-std::vector<RespValue>
-LpopCommand::executeOnImpl(const std::vector<RespValue> &args,
-                           ServerConnection &connection) {
-  return doExecute(args, connection.getContext().getRedisStore());
 }

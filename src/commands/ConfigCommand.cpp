@@ -1,8 +1,8 @@
 #include "commands/ConfigCommand.hpp"
 #include "AppConfig.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
+#include <utility>
+#include <vector>
 
 std::vector<RespValue>
 ConfigCommand::doExecute(const std::vector<RespValue> &args,
@@ -27,16 +27,4 @@ ConfigCommand::doExecute(const std::vector<RespValue> &args,
   resp_array.add(RespBulkString(arg2)).add(RespBulkString(master_config->dir));
   result.emplace_back(std::move(resp_array));
   return result;
-}
-
-std::vector<RespValue>
-ConfigCommand::executeOnImpl(const std::vector<RespValue> &args,
-                             ClientConnection &connection) {
-  return doExecute(args, connection.getContext().getConfig());
-}
-
-std::vector<RespValue>
-ConfigCommand::executeOnImpl(const std::vector<RespValue> &args,
-                             ServerConnection &connection) {
-  return doExecute(args, connection.getContext().getConfig());
 }
