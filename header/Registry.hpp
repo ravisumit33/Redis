@@ -3,8 +3,6 @@
 #include <functional>
 #include <map>
 #include <memory>
-#include <mutex>
-#include <shared_mutex>
 
 template <typename Key, typename Value> class Registry {
 public:
@@ -19,20 +17,17 @@ public:
   Registry &operator=(Registry &&) = delete;
 
   void add(const Key &key, Factory factory) {
-    std::lock_guard<std::shared_mutex> lock(mMutex);
-    mFactoryMap[key] = factory;
+    mFactoryMap[key] = std::move(factory);
   }
 
-  std::unique_ptr<Value> get(const Key &key) {
-    std::shared_lock<std::shared_mutex> lock(mMutex);
-    if (!mFactoryMap.contains(key)) {
+  std::unique_ptr<Value> get(const Key &key) const {
+    auto iter = mFactoryMap.find(key);
+    if (iter == mFactoryMap.end()) {
       return nullptr;
     }
-    auto factory = mFactoryMap[key];
-    return factory();
+    return iter->second();
   }
 
 private:
   std::map<Key, Factory> mFactoryMap;
-  std::shared_mutex mMutex;
 };

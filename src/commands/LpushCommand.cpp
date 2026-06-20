@@ -1,5 +1,5 @@
 #include "commands/LpushCommand.hpp"
-#include "AppContext.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
@@ -8,7 +8,7 @@
 
 std::vector<RespValue>
 LpushCommand::doExecute(const std::vector<RespValue> &args,
-                        AppContext &context) {
+                        RedisStore &store) {
   std::vector<RespValue> result;
   auto store_key = getStringValue(args.at(0));
   std::vector<std::string> elements;
@@ -17,7 +17,7 @@ LpushCommand::doExecute(const std::vector<RespValue> &args,
                          [](const auto &arg) { return getStringValue(arg); });
   std::ranges::reverse(elements);
   auto list_size =
-      context.getRedisStore().addListElementsAtBegin(store_key, elements);
+      store.addListElementsAtBegin(store_key, elements);
   result.emplace_back(RespInt(static_cast<int64_t>(list_size)));
   return result;
 }
@@ -25,11 +25,11 @@ LpushCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 LpushCommand::executeOnImpl(const std::vector<RespValue> &args,
                             ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }
 
 std::vector<RespValue>
 LpushCommand::executeOnImpl(const std::vector<RespValue> &args,
                             ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }

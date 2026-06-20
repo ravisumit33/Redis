@@ -1,5 +1,5 @@
 #include "commands/XreadCommand.hpp"
-#include "AppContext.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
@@ -9,7 +9,7 @@
 
 std::vector<RespValue>
 XreadCommand::doExecute(const std::vector<RespValue> &args,
-                        AppContext &context) {
+                        RedisStore &store) {
   std::vector<RespValue> result;
   std::size_t arg_idx = 0;
   std::optional<uint64_t> timeout_ms;
@@ -41,7 +41,7 @@ XreadCommand::doExecute(const std::vector<RespValue> &args,
     entry_ids_start.emplace_back(stream_entry_id_start);
   }
   auto [timed_out, stream_entries_map] =
-      context.getRedisStore().getStreamEntriesAfterAny(
+      store.getStreamEntriesAfterAny(
           store_keys, entry_ids_start, timeout_ms);
 
   if (timed_out) {
@@ -68,11 +68,11 @@ XreadCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 XreadCommand::executeOnImpl(const std::vector<RespValue> &args,
                             ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }
 
 std::vector<RespValue>
 XreadCommand::executeOnImpl(const std::vector<RespValue> &args,
                             ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }

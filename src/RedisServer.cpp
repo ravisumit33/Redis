@@ -20,7 +20,9 @@
 #include <thread>
 #include <unistd.h>
 
-RedisServer::RedisServer(AppConfig config) : m_context(std::move(config)) {}
+RedisServer::RedisServer(AppConfig config) : m_context(std::move(config)) {
+  m_context.initialize();
+}
 
 void RedisServer::start() {
 
@@ -60,6 +62,7 @@ void RedisServer::start() {
 
     auto self = shared_from_this();
     auto ready_callback = [self]() { self->m_init_done = true; };
+    // `self` keeps RedisServer (and m_context) alive for the thread's lifetime.
     std::thread master_thread([self, callback = ready_callback]() {
       ServerConnection master_con(self->m_master_fd, self->m_context, callback);
       master_con.handleConnection();
@@ -71,23 +74,27 @@ void RedisServer::start() {
         std::filesystem::path(mmetadata->dir) / mmetadata->dbfilename;
     std::ifstream rdb_fstream(rdb_path);
     if (rdb_fstream) {
+      RdbParserRegistry rdb_registry;
+      registerRdbParsers(rdb_registry);
       RdbParseState state;
       RdbHeaderParser rdb_header_parser;
-      rdb_header_parser.parse(rdb_fstream, m_context, state);
+      rdb_header_parser.parse(rdb_fstream, rdb_registry,
+                              m_context.getRedisStore(), state);
       while (rdb_fstream.peek() != std::char_traits<char>::eof()) {
         char opc = static_cast<char>(rdb_fstream.get());
         if (!rdb_fstream) {
           throw std::runtime_error("Failure reading rdb file");
         }
         auto rdb_opcode = static_cast<RdbOpcode>(static_cast<uint8_t>(opc));
-        auto parser = m_context.getRdbParserRegistry().get(rdb_opcode);
+        auto parser = rdb_registry.get(rdb_opcode);
         if (!parser) {
           throw std::runtime_error(
               "Invalid opcode: " +
               std::to_string(static_cast<uint8_t>(rdb_opcode)) +
               " found during RDB parsing");
         }
-        parser->parse(rdb_fstream, m_context, state);
+        parser->parse(rdb_fstream, rdb_registry, m_context.getRedisStore(),
+                      state);
       }
     }
     m_init_done = true;
@@ -180,6 +187,7 @@ void RedisServer::acceptConnections() {
       }
 
       auto self = shared_from_this();
+      // `self` keeps RedisServer (and m_context) alive for the thread's lifetime.
       std::thread client_thread([self, client_fd]() {
         try {
           ClientConnection client_con(client_fd, self->m_context);

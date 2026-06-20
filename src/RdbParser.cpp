@@ -1,5 +1,4 @@
 #include "RdbParser.hpp"
-#include "AppContext.hpp"
 #include "redis_store/RedisStore.hpp"
 #include "utils/genericUtils.hpp"
 #include <bit>
@@ -82,8 +81,9 @@ std::string RdbPayloadParser::readString(std::istream &in_stream) {
   }
 }
 
-void RdbHeaderParser::parse(std::istream &in_stream, AppContext & /*context*/,
-                            RdbParseState & /*state*/) {
+void RdbHeaderParser::parse(std::istream &in_stream,
+                            RdbParserRegistry & /*registry*/,
+                            RedisStore & /*store*/, RdbParseState & /*state*/) {
   constexpr size_t MAGIC_STRING_LENGTH = 5;
   auto magic_string_bytes = readBytes<MAGIC_STRING_LENGTH>(in_stream);
   std::string magic_string(magic_string_bytes.begin(),
@@ -102,34 +102,36 @@ void RdbHeaderParser::parse(std::istream &in_stream, AppContext & /*context*/,
             << '\n';
 }
 
-void RdbAuxKeyParser::parse(std::istream &in_stream, AppContext & /*context*/,
-                            RdbParseState & /*state*/) {
+void RdbAuxKeyParser::parse(std::istream &in_stream,
+                            RdbParserRegistry & /*registry*/,
+                            RedisStore & /*store*/, RdbParseState & /*state*/) {
   auto metadata_key = readString(in_stream);
   auto metadata_value = readString(in_stream);
   std::cout << "Aux key: " << metadata_key << ", value: " << metadata_value
             << '\n';
 }
 
-void RdbDbParser::parse(std::istream &in_stream, AppContext &context,
-                        RdbParseState & /*state*/) {
+void RdbDbParser::parse(std::istream &in_stream, RdbParserRegistry &registry,
+                        RedisStore &store, RdbParseState & /*state*/) {
   auto [is_specially_encoded, db_idx] = readSizeEncodedValue(in_stream);
   std::cout << "Database index: " << db_idx << '\n';
 
   while (isInlineMetadata(static_cast<RdbOpcode>(peekByte(in_stream)))) {
     auto [rdb_opcode] = readBytes<1>(in_stream);
     auto rdb_parser =
-        context.getRdbParserRegistry().get(static_cast<RdbOpcode>(rdb_opcode));
+        registry.get(static_cast<RdbOpcode>(rdb_opcode));
     if (!rdb_parser) {
       throw std::runtime_error("Invalid opcode: " + std::to_string(rdb_opcode) +
                                " found during RDB parsing");
     }
     RdbParseState child_state;
-    rdb_parser->parse(in_stream, context, child_state);
+    rdb_parser->parse(in_stream, registry, store, child_state);
   }
 }
 
 void RdbHashTableParser::parse(std::istream &in_stream,
-                               AppContext & /*context*/,
+                               RdbParserRegistry & /*registry*/,
+                               RedisStore & /*store*/,
                                RdbParseState & /*state*/) {
   auto [is_specially_encoded_total, total_kv] = readSizeEncodedValue(in_stream);
   auto [is_specially_encoded_expire, expire_kv] =
@@ -138,18 +140,20 @@ void RdbHashTableParser::parse(std::istream &in_stream,
             << expire_kv << " has expiry set." << '\n';
 }
 
-void RdbEofParser::parse(std::istream &in_stream, AppContext & /*context*/,
-                         RdbParseState & /*state*/) {
+void RdbEofParser::parse(std::istream &in_stream,
+                         RdbParserRegistry & /*registry*/,
+                         RedisStore & /*store*/, RdbParseState & /*state*/) {
   constexpr unsigned BYTE_TO_BITS = 8;
   auto check_sum = bytesToUInt(readBytes<BYTE_TO_BITS>(in_stream));
   std::cout << "RDB checksum: " << check_sum << '\n';
 }
 
-void RdbStringValueParser::parse(std::istream &in_stream, AppContext &context,
-                                 RdbParseState &state) {
+void RdbStringValueParser::parse(std::istream &in_stream,
+                                 RdbParserRegistry & /*registry*/,
+                                 RedisStore &store, RdbParseState &state) {
   std::string key = readString(in_stream);
   std::string value = readString(in_stream);
-  context.getRedisStore().setString(key, value, state.expiry);
+  store.setString(key, value, state.expiry);
   std::cout << "Store key: " << key << ", value: " << value;
   if (state.expiry) {
     std::cout << ", expiry after: "
@@ -160,8 +164,9 @@ void RdbStringValueParser::parse(std::istream &in_stream, AppContext &context,
   std::cout << '\n';
 }
 
-void RdbKeyValueExpMsParser::parse(std::istream &in_stream, AppContext &context,
-                                   RdbParseState &state) {
+void RdbKeyValueExpMsParser::parse(std::istream &in_stream,
+                                   RdbParserRegistry &registry,
+                                   RedisStore &store, RdbParseState &state) {
   constexpr unsigned BYTE_TO_BITS = 8;
   auto expiry = std::chrono::milliseconds(
       bytesToUInt(readBytes<BYTE_TO_BITS>(in_stream, std::endian::little)));
@@ -170,17 +175,17 @@ void RdbKeyValueExpMsParser::parse(std::istream &in_stream, AppContext &context,
     throw std::runtime_error("Invalid opcode: " + std::to_string(rdb_opcode) +
                              " found during RDB parsing");
   }
-  auto parser =
-      context.getRdbParserRegistry().get(static_cast<RdbOpcode>(rdb_opcode));
+  auto parser = registry.get(static_cast<RdbOpcode>(rdb_opcode));
   if (!parser) {
     throw std::logic_error("Unexpected: parser not found");
   }
   state.expiry = std::chrono::system_clock::time_point{expiry};
-  parser->parse(in_stream, context, state);
+  parser->parse(in_stream, registry, store, state);
 }
 
-void RdbKeyValueExpSParser::parse(std::istream &in_stream, AppContext &context,
-                                  RdbParseState &state) {
+void RdbKeyValueExpSParser::parse(std::istream &in_stream,
+                                  RdbParserRegistry &registry,
+                                  RedisStore &store, RdbParseState &state) {
   constexpr unsigned BYTE_TO_BITS = 8;
   auto expiry = std::chrono::seconds(
       bytesToUInt(readBytes<BYTE_TO_BITS>(in_stream, std::endian::little)));
@@ -189,13 +194,12 @@ void RdbKeyValueExpSParser::parse(std::istream &in_stream, AppContext &context,
     throw std::runtime_error("Invalid opcode: " + std::to_string(rdb_opcode) +
                              " found during RDB parsing");
   }
-  auto parser =
-      context.getRdbParserRegistry().get(static_cast<RdbOpcode>(rdb_opcode));
+  auto parser = registry.get(static_cast<RdbOpcode>(rdb_opcode));
   if (!parser) {
     throw std::logic_error("Unexpected: parser not found");
   }
   state.expiry = std::chrono::system_clock::time_point{expiry};
-  parser->parse(in_stream, context, state);
+  parser->parse(in_stream, registry, store, state);
 }
 
 void registerRdbParsers(RdbParserRegistry &registry) {

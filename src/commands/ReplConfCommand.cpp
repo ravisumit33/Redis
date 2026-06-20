@@ -1,6 +1,5 @@
 #include "commands/ReplConfCommand.hpp"
 #include "AppConfig.hpp"
-#include "AppContext.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
@@ -9,9 +8,9 @@
 
 std::vector<RespValue>
 ReplConfCommand::doExecute(const std::vector<RespValue> &args,
-                           AppContext &context, unsigned socket_fd) {
+                           const AppConfig &config, ReplicationManager &repl,
+                           unsigned socket_fd) {
   std::vector<RespValue> result;
-  const AppConfig &config = context.getConfig();
 
   if (config.isMaster()) {
     auto arg1 = getStringValue(args.at(0));
@@ -26,7 +25,7 @@ ReplConfCommand::doExecute(const std::vector<RespValue> &args,
         result.emplace_back(RespError("Unsupported command arg"));
         return result;
       }
-      auto &master_state = context.getReplicationManager().master();
+      auto &master_state = repl.master();
       master_state.updateSlave(socket_fd, slave_offset);
     } else {
       result.emplace_back(RespString("OK"));
@@ -39,7 +38,7 @@ ReplConfCommand::doExecute(const std::vector<RespValue> &args,
       return result;
     }
     RespArray resp_array;
-    auto &slave_state = context.getReplicationManager().slave();
+    auto &slave_state = repl.slave();
     std::size_t bytes_processed = slave_state.getBytesProcessed();
     resp_array.add(RespBulkString("REPLCONF"))
         .add(RespBulkString("ACK"))
@@ -52,11 +51,15 @@ ReplConfCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 ReplConfCommand::executeOnImpl(const std::vector<RespValue> &args,
                                ClientConnection &connection) {
-  return doExecute(args, connection.getContext(), connection.getSocketFd());
+  return doExecute(args, connection.getContext().getConfig(),
+                   connection.getContext().getReplicationManager(),
+                   connection.getSocketFd());
 }
 
 std::vector<RespValue>
 ReplConfCommand::executeOnImpl(const std::vector<RespValue> &args,
                                ServerConnection &connection) {
-  return doExecute(args, connection.getContext(), connection.getSocketFd());
+  return doExecute(args, connection.getContext().getConfig(),
+                   connection.getContext().getReplicationManager(),
+                   connection.getSocketFd());
 }

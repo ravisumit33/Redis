@@ -2,7 +2,8 @@
 
 #include "Command.hpp"
 
-class AppContext;
+class AppConfig;
+class ReplicationManager;
 
 class InfoCommand : public Command {
 public:
@@ -17,7 +18,8 @@ protected:
 
 private:
   static std::vector<RespValue> doExecute(const std::vector<RespValue> &args,
-                                          AppContext &context);
+                                          const AppConfig &config,
+                                          ReplicationManager &repl);
 
   bool validateArgsImpl(const std::vector<RespValue> &args) override {
     return args.size() == 1;

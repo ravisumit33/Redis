@@ -1,5 +1,6 @@
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
+#include "utils/SocketUtils.hpp"
 #include "utils/genericUtils.hpp"
 #include <cctype>
 #include <chrono>
@@ -20,7 +21,7 @@ void MasterState::propagateToSlave(const std::string &data) {
   std::cout << "Propagating write command to " << getSlaveCount() << " slaves"
             << '\n';
   for (const auto [slave_fd, slave_offset] : m_slaves) {
-    writeToSocket(slave_fd, data);
+    SocketUtils::writeToSocket(slave_fd, data);
   }
 }
 
@@ -38,7 +39,7 @@ void MasterState::sendGetAckToSlaves() {
     array.add(RespBulkString("REPLCONF"));
     array.add(RespBulkString("GETACK"));
     array.add(RespBulkString("*"));
-    writeToSocket(slave_fd, array.serialize());
+    SocketUtils::writeToSocket(slave_fd, array.serialize());
   }
 }
 

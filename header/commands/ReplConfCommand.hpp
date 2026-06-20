@@ -2,7 +2,8 @@
 
 #include "Command.hpp"
 
-class AppContext;
+class AppConfig;
+class ReplicationManager;
 
 class ReplConfCommand : public Command {
 public:
@@ -17,7 +18,8 @@ protected:
 
 private:
   static std::vector<RespValue> doExecute(const std::vector<RespValue> &args,
-                                          AppContext &context,
+                                          const AppConfig &config,
+                                          ReplicationManager &repl,
                                           unsigned socket_fd);
 
   bool validateArgsImpl(const std::vector<RespValue> &args) override {

@@ -3,6 +3,7 @@
 #include "Command.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
+#include "utils/SocketUtils.hpp"
 #include "utils/genericUtils.hpp"
 #include <algorithm>
 #include <cctype>
@@ -31,7 +32,7 @@ void ClientConnection::handleSubscribedModeError(const Command &command) {
                          [](unsigned char chr) { return std::tolower(chr); });
   RespError resp_error("Can't execute '" + command_type +
                        "' in subscribed mode");
-  writeToSocket(getSocketFd(), resp_error.serialize());
+  SocketUtils::writeToSocket(getSocketFd(), resp_error.serialize());
 }
 
 void ClientConnection::checkAndRegisterSlave(
@@ -61,7 +62,7 @@ void ClientConnection::processCommand(std::unique_ptr<Command> command,
   if (isInTransaction() && !command->isControlCommand()) {
     queueCommand(std::move(command), std::move(args));
     RespString resp("QUEUED");
-    writeToSocket(getSocketFd(), resp.serialize());
+    SocketUtils::writeToSocket(getSocketFd(), resp.serialize());
     return;
   }
 
@@ -72,7 +73,7 @@ void ClientConnection::processCommand(std::unique_ptr<Command> command,
   for (const auto &response : responses) {
     resp += response.serialize();
   }
-  writeToSocket(getSocketFd(), resp);
+  SocketUtils::writeToSocket(getSocketFd(), resp);
 
   if (getContext().getConfig().isMaster() && command->isWriteCommand()) {
     auto &master_state = getContext().getReplicationManager().master();
@@ -84,7 +85,7 @@ void ClientConnection::processCommand(std::unique_ptr<Command> command,
 void ClientConnection::handleConnection() {
   try {
     while (true) {
-      std::string data = readFromSocket(getSocketFd());
+      std::string data = SocketUtils::readFromSocket(getSocketFd());
       if (data.empty()) {
         std::cout << "Client disconnected gracefully [fd=" << getSocketFd()
                   << "]" << '\n';
@@ -103,7 +104,7 @@ void ClientConnection::handleConnection() {
           std::cerr << "Command execution error [fd=" << getSocketFd()
                     << "]: " << ex.what() << '\n';
           RespError errResponse(ex.what());
-          writeToSocket(getSocketFd(), errResponse.serialize());
+          SocketUtils::writeToSocket(getSocketFd(), errResponse.serialize());
         }
       }
     }
@@ -131,5 +132,5 @@ void ClientConnection::RedisSubscriber::onMessage(const std::string &msg) {
   resp_array.add(RespBulkString("message"))
       .add(RespBulkString(m_channel_name))
       .add(RespBulkString(msg));
-  writeToSocket(m_con.getSocketFd(), resp_array.serialize());
+  SocketUtils::writeToSocket(m_con.getSocketFd(), resp_array.serialize());
 }

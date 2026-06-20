@@ -2,7 +2,7 @@
 
 #include "Command.hpp"
 
-class AppContext;
+class RedisStore;
 
 class XreadCommand : public Command {
 public:
@@ -17,7 +17,7 @@ protected:
 
 private:
   static std::vector<RespValue> doExecute(const std::vector<RespValue> &args,
-                                          AppContext &context);
+                                          RedisStore &store);
 
   bool validateArgsImpl(const std::vector<RespValue> &args) override {
     std::size_t nargs = args.size();

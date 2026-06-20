@@ -1,6 +1,5 @@
 #include "commands/InfoCommand.hpp"
 #include "AppConfig.hpp"
-#include "AppContext.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
@@ -9,9 +8,8 @@
 
 std::vector<RespValue>
 InfoCommand::doExecute(const std::vector<RespValue> &args,
-                       AppContext &context) {
+                       const AppConfig &config, ReplicationManager &repl) {
   std::vector<RespValue> result;
-  const auto &config = context.getConfig();
 
   auto arg = getStringValue(args.at(0));
   if (arg != "replication") {
@@ -24,7 +22,7 @@ InfoCommand::doExecute(const std::vector<RespValue> &args,
     return result;
   }
   std::string replicationInfo = "role:master";
-  auto &master_state = context.getReplicationManager().master();
+  auto &master_state = repl.master();
   std::string master_replid = master_state.getReplId();
   uint64_t master_repl_offset = master_state.getReplOffset();
   replicationInfo += std::string("\n") + "master_replid:" + master_replid;
@@ -37,11 +35,13 @@ InfoCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 InfoCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getConfig(),
+                   connection.getContext().getReplicationManager());
 }
 
 std::vector<RespValue>
 InfoCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getConfig(),
+                   connection.getContext().getReplicationManager());
 }

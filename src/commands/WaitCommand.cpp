@@ -1,5 +1,4 @@
 #include "commands/WaitCommand.hpp"
-#include "AppContext.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
@@ -7,13 +6,13 @@
 
 std::vector<RespValue>
 WaitCommand::doExecute(const std::vector<RespValue> &args,
-                       AppContext &context) {
+                       ReplicationManager &repl) {
   std::vector<RespValue> result;
   auto arg1 = getStringValue(args.at(0));
   unsigned expected_slave_count = std::stoul(arg1);
   auto arg2 = getStringValue(args.at(1));
   unsigned timeout_ms = std::stoul(arg2);
-  auto &master_state = context.getReplicationManager().master();
+  auto &master_state = repl.master();
   master_state.sendGetAckToSlaves();
   unsigned slave_count =
       master_state.waitForSlaves(expected_slave_count, timeout_ms);
@@ -24,11 +23,11 @@ WaitCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 WaitCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getReplicationManager());
 }
 
 std::vector<RespValue>
 WaitCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getReplicationManager());
 }

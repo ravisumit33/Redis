@@ -1,9 +1,8 @@
 #include "commands/SetCommand.hpp"
-#include "AppContext.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
-#include "redis_store/RedisStore.hpp"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -13,7 +12,7 @@
 #include <optional>
 
 std::vector<RespValue> SetCommand::doExecute(const std::vector<RespValue> &args,
-                                             AppContext &context) {
+                                             RedisStore &store) {
   std::vector<RespValue> result;
 
   size_t nargs = args.size();
@@ -43,7 +42,7 @@ std::vector<RespValue> SetCommand::doExecute(const std::vector<RespValue> &args,
     }
   }
 
-  context.getRedisStore().setString(key, value, expiry);
+  store.setString(key, value, expiry);
   std::cout << "Key: " << key << " set in store with value: " << value << '\n';
   result.emplace_back(RespString("OK"));
   return result;
@@ -52,11 +51,11 @@ std::vector<RespValue> SetCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 SetCommand::executeOnImpl(const std::vector<RespValue> &args,
                           ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }
 
 std::vector<RespValue>
 SetCommand::executeOnImpl(const std::vector<RespValue> &args,
                           ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }

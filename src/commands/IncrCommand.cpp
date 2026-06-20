@@ -1,5 +1,5 @@
 #include "commands/IncrCommand.hpp"
-#include "AppContext.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
@@ -8,13 +8,13 @@
 
 std::vector<RespValue>
 IncrCommand::doExecute(const std::vector<RespValue> &args,
-                       AppContext &context) {
+                       RedisStore &store) {
   std::vector<RespValue> result;
   auto store_key = getStringValue(args.at(0));
 
-  auto store_val_ptr = context.getRedisStore().get(store_key);
+  auto store_val_ptr = store.get(store_key);
   if (!store_val_ptr) {
-    context.getRedisStore().setString(store_key, "1");
+    store.setString(store_key, "1");
     result.emplace_back(RespInt(1));
     return result;
   }
@@ -34,7 +34,7 @@ IncrCommand::doExecute(const std::vector<RespValue> &args,
   }
 
   ++int_val;
-  context.getRedisStore().setString(store_key, std::to_string(int_val));
+  store.setString(store_key, std::to_string(int_val));
   result.emplace_back(RespInt(int_val));
   return result;
 }
@@ -42,11 +42,11 @@ IncrCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 IncrCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }
 
 std::vector<RespValue>
 IncrCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }

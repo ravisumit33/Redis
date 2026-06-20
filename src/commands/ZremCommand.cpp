@@ -1,12 +1,12 @@
 #include "commands/ZremCommand.hpp"
-#include "AppContext.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
 
 std::vector<RespValue>
 ZremCommand::doExecute(const std::vector<RespValue> &args,
-                       AppContext &context) {
+                       RedisStore &store) {
   std::vector<RespValue> result;
   auto store_key = getStringValue(args.at(0));
   auto member = getStringValue(args.at(1));
@@ -14,7 +14,7 @@ ZremCommand::doExecute(const std::vector<RespValue> &args,
   std::size_t removed_cnt = 0;
   try {
     removed_cnt =
-        context.getRedisStore().removeMemberFromSet(store_key, member);
+        store.removeMemberFromSet(store_key, member);
   } catch (...) {
   }
 
@@ -25,11 +25,11 @@ ZremCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 ZremCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }
 
 std::vector<RespValue>
 ZremCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }

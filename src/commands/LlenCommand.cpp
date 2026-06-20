@@ -1,5 +1,5 @@
 #include "commands/LlenCommand.hpp"
-#include "AppContext.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
@@ -7,10 +7,10 @@
 
 std::vector<RespValue>
 LlenCommand::doExecute(const std::vector<RespValue> &args,
-                       AppContext &context) {
+                       RedisStore &store) {
   std::vector<RespValue> result;
   auto store_key = getStringValue(args.at(0));
-  auto val = context.getRedisStore().get(store_key);
+  auto val = store.get(store_key);
   if (!val) {
     result.emplace_back(RespInt(0));
     return result;
@@ -27,11 +27,11 @@ LlenCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 LlenCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }
 
 std::vector<RespValue>
 LlenCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }

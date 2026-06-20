@@ -2,7 +2,7 @@
 
 #include "Command.hpp"
 
-class AppContext;
+class RedisStore;
 
 class LpopCommand : public Command {
 public:
@@ -17,7 +17,7 @@ protected:
 
 private:
   static std::vector<RespValue> doExecute(const std::vector<RespValue> &args,
-                                          AppContext &context);
+                                          RedisStore &store);
 
   bool validateArgsImpl(const std::vector<RespValue> &args) override {
     return args.size() == 1 || args.size() == 2;

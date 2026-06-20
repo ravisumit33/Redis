@@ -2,7 +2,6 @@
 
 #include "AppConfig.hpp"
 #include "Command.hpp"
-#include "RdbParser.hpp"
 #include "RedisChannel.hpp"
 #include "ReplicationState.hpp"
 #include "redis_store/RedisStore.hpp"
@@ -11,6 +10,8 @@ class AppContext {
 public:
   explicit AppContext(AppConfig config);
   ~AppContext() = default;
+
+  void initialize();
 
   AppContext(const AppContext &) = delete;
   AppContext &operator=(const AppContext &) = delete;
@@ -32,10 +33,12 @@ public:
   const CommandRegistry &getCommandRegistry() const {
     return m_command_registry;
   }
-  RdbParserRegistry &getRdbParserRegistry() { return m_rdb_parser_registry; }
-  const RdbParserRegistry &getRdbParserRegistry() const {
-    return m_rdb_parser_registry;
-  }
+
+  // Lock acquisition order when multiple subsystem locks are held simultaneously:
+  //   1. RedisStore::m_mutex
+  //   2. MasterState::m_mutex  (via ReplicationManager)
+  //   3. RedisChannel::m_mutex
+  // All code acquiring multiple locks must respect this order to prevent deadlock.
 
 private:
   AppConfig m_config;
@@ -43,5 +46,4 @@ private:
   ReplicationManager m_replication_manager;
   RedisChannelManager m_channel_manager;
   CommandRegistry m_command_registry;
-  RdbParserRegistry m_rdb_parser_registry;
 };

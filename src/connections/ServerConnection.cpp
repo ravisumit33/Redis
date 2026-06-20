@@ -4,6 +4,7 @@
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "RespTypeParser.hpp"
+#include "utils/SocketUtils.hpp"
 #include "utils/genericUtils.hpp"
 #include <exception>
 #include <functional>
@@ -21,11 +22,11 @@ void ServerConnection::sendCommand(std::vector<RespValue> args) {
   for (auto &resp_val : args) {
     array.add(std::move(resp_val));
   }
-  writeToSocket(getSocketFd(), array.serialize());
+  SocketUtils::writeToSocket(getSocketFd(), array.serialize());
 }
 
 void ServerConnection::validateResponse(auto validate) {
-  auto servResponse = readFromSocket(getSocketFd());
+  auto servResponse = SocketUtils::readFromSocket(getSocketFd());
   std::cout << "Received: " << servResponse << " from master: " << getSocketFd()
             << '\n';
   std::istringstream in_stream(servResponse);
@@ -94,7 +95,7 @@ void ServerConnection::processBacklogCommands(
       resp += response.serialize();
     }
     if (command->getType() == Command::Type::REPLCONF) {
-      writeToSocket(getSocketFd(), resp);
+      SocketUtils::writeToSocket(getSocketFd(), resp);
     }
     std::streampos cur_pos = input_stream.tellg();
     std::size_t bytes_remaining =
@@ -152,7 +153,7 @@ void ServerConnection::configurePsync() {
         throw std::runtime_error("Unexpected RDB file");
       }
     } else {
-      std::string servResponse = readFromSocket(getSocketFd());
+      std::string servResponse = SocketUtils::readFromSocket(getSocketFd());
       std::cout << "Received: " << servResponse
                 << " from master [fd=" << getSocketFd() << "]" << '\n';
       next_server_response.emplace(servResponse);
@@ -195,7 +196,7 @@ void ServerConnection::handleConnection() {
 
   try {
     while (true) {
-      std::string data = readFromSocket(getSocketFd());
+      std::string data = SocketUtils::readFromSocket(getSocketFd());
       if (data.empty()) {
         std::cout << "Server disconnected at: " << getSocketFd() << '\n';
         break;
@@ -215,7 +216,7 @@ void ServerConnection::handleConnection() {
           serialized_response += response.serialize();
         }
         if (command->getType() == Command::Type::REPLCONF) {
-          writeToSocket(getSocketFd(), serialized_response);
+          SocketUtils::writeToSocket(getSocketFd(), serialized_response);
         }
         std::streampos pos = socket_data.tellg();
         std::size_t bytes_remaining =

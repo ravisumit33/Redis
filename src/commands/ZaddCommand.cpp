@@ -1,5 +1,5 @@
 #include "commands/ZaddCommand.hpp"
-#include "AppContext.hpp"
+#include "redis_store/RedisStore.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
@@ -7,14 +7,14 @@
 
 std::vector<RespValue>
 ZaddCommand::doExecute(const std::vector<RespValue> &args,
-                       AppContext &context) {
+                       RedisStore &store) {
   std::vector<RespValue> result;
   auto store_key = getStringValue(args.at(0));
   auto score = std::stod(getStringValue(args.at(1)));
   auto member = getStringValue(args.at(2));
 
   auto added_count =
-      context.getRedisStore().addMemberToSet(store_key, score, member);
+      store.addMemberToSet(store_key, score, member);
   std::cout << "Member: " << member << " with score: " << score
             << " added to set with key: " << store_key << '\n';
   result.emplace_back(RespInt(static_cast<int64_t>(added_count)));
@@ -24,11 +24,11 @@ ZaddCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 ZaddCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }
 
 std::vector<RespValue>
 ZaddCommand::executeOnImpl(const std::vector<RespValue> &args,
                            ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getRedisStore());
 }

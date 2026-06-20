@@ -1,13 +1,12 @@
 #include "commands/ConfigCommand.hpp"
 #include "AppConfig.hpp"
-#include "AppContext.hpp"
 #include "RespType.hpp"
 #include "connections/ClientConnection.hpp"
 #include "connections/ServerConnection.hpp"
 
 std::vector<RespValue>
 ConfigCommand::doExecute(const std::vector<RespValue> &args,
-                         AppContext &context) {
+                         const AppConfig &config) {
   std::vector<RespValue> result;
   auto arg1 = getStringValue(args.at(0));
   if (arg1 != "GET") {
@@ -15,7 +14,6 @@ ConfigCommand::doExecute(const std::vector<RespValue> &args,
     return result;
   }
   auto arg2 = getStringValue(args.at(1));
-  const auto &config = context.getConfig();
   const auto &master_config = config.getMasterConfig();
   if (!master_config) {
     result.emplace_back(RespError("Command not supported in non-master mode"));
@@ -34,11 +32,11 @@ ConfigCommand::doExecute(const std::vector<RespValue> &args,
 std::vector<RespValue>
 ConfigCommand::executeOnImpl(const std::vector<RespValue> &args,
                              ClientConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getConfig());
 }
 
 std::vector<RespValue>
 ConfigCommand::executeOnImpl(const std::vector<RespValue> &args,
                              ServerConnection &connection) {
-  return doExecute(args, connection.getContext());
+  return doExecute(args, connection.getContext().getConfig());
 }
