@@ -42,8 +42,6 @@
 #include <variant>
 #include <vector>
 
-class ClientConnection;
-class ServerConnection;
 class AppContext;
 
 using Command = std::variant<
@@ -55,18 +53,6 @@ using Command = std::variant<
     XaddCommand, XrangeCommand, XreadCommand, ZaddCommand, ZcardCommand,
     ZrangeCommand, ZrankCommand, ZremCommand, ZscoreCommand>;
 
-template <typename Cmd, typename Conn>
-concept CommandFor =
-    requires(const Cmd &cmd, const std::vector<RespValue> &args, Conn &n) {
-      { cmd.execute(args, n) } -> std::same_as<std::vector<RespValue>>;
-    };
-
-std::vector<RespValue> executeCommand(Command &cmd,
-                                      const std::vector<RespValue> &args,
-                                      ClientConnection &conn);
-std::vector<RespValue> executeCommand(Command &cmd,
-                                      const std::vector<RespValue> &args,
-                                      ServerConnection &conn);
 bool isWriteCommand(const Command &cmd);
 bool isControlCommand(const Command &cmd);
 bool isSubscribedModeCommand(const Command &cmd);

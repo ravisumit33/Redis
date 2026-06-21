@@ -1,10 +1,9 @@
 #pragma once
 
 #include "RespType.hpp"
+#include "connections/Capabilities.hpp"
 #include <string_view>
 #include <vector>
-
-class ClientConnection;
 
 class ExecCommand {
 public:
@@ -17,6 +16,18 @@ public:
     return args.empty();
   }
 
+  template <typename Ctx>
+    requires Transactional<Ctx>
   static std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                        ClientConnection &conn);
+                                        Ctx &ctx);
 };
+
+template <typename Ctx>
+  requires Transactional<Ctx>
+std::vector<RespValue>
+ExecCommand::execute(const std::vector<RespValue> & /*args*/, Ctx &ctx) {
+  if (!ctx.txn().inTransaction()) {
+    return {RespError("EXEC without MULTI")};
+  }
+  return ctx.txn().executeQueued(ctx);
+}

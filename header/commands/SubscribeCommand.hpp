@@ -1,10 +1,12 @@
 #pragma once
 
 #include "RespType.hpp"
+#include "connections/Capabilities.hpp"
 #include <string_view>
 #include <vector>
 
-class ClientConnection;
+class Subscriptions;
+class RedisChannelManager;
 
 class SubscribeCommand {
 public:
@@ -17,6 +19,15 @@ public:
     return args.size() == 1;
   }
 
+  template <typename Ctx>
+    requires PubSub<Ctx> && Channels<Ctx>
   static std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                        ClientConnection &conn);
+                                        Ctx &ctx) {
+    return doExecute(args, ctx.subs(), ctx.channels());
+  }
+
+private:
+  static std::vector<RespValue> doExecute(const std::vector<RespValue> &args,
+                                          Subscriptions &subs,
+                                          RedisChannelManager &channels);
 };

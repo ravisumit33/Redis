@@ -1,10 +1,11 @@
 #pragma once
 
 #include "RespType.hpp"
+#include "connections/Capabilities.hpp"
 #include <string_view>
 #include <vector>
 
-class ClientConnection;
+class Subscriptions;
 
 class UnsubscribeCommand {
 public:
@@ -17,6 +18,14 @@ public:
     return args.size() == 1;
   }
 
+  template <typename Ctx>
+    requires PubSub<Ctx>
   static std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                        ClientConnection &conn);
+                                        Ctx &ctx) {
+    return doExecute(args, ctx.subs());
+  }
+
+private:
+  static std::vector<RespValue> doExecute(const std::vector<RespValue> &args,
+                                          Subscriptions &subs);
 };

@@ -1,13 +1,13 @@
 #include "commands/MultiCommand.hpp"
 #include "RespType.hpp"
-#include "connections/ClientConnection.hpp"
+#include "connections/TransactionState.hpp"
 #include <vector>
 
 std::vector<RespValue>
-MultiCommand::execute(const std::vector<RespValue> & /*args*/,
-                      ClientConnection &connection) {
+MultiCommand::doExecute(const std::vector<RespValue> & /*args*/,
+                        TransactionState &txn) {
   std::vector<RespValue> result;
-  connection.beginTransaction();
+  txn.begin();
   result.emplace_back(RespString("OK"));
   return result;
 }

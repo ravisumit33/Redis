@@ -36,60 +36,13 @@
 #include "commands/ZrankCommand.hpp"
 #include "commands/ZremCommand.hpp"
 #include "commands/ZscoreCommand.hpp"
-#include "connections/ClientConnection.hpp"
-#include "connections/ServerConnection.hpp"
 #include <istream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
-
-namespace {
-bool validateCommandArgs(Command &cmd, const std::vector<RespValue> &args) {
-  for (const auto &arg : args) {
-    if (arg.getType() != RespType::BULK_STRING) {
-      return false;
-    }
-  }
-  return std::visit([&](auto &cmd) { return cmd.validateArgs(args); }, cmd);
-}
-} // namespace
-
-std::vector<RespValue> executeCommand(Command &cmd,
-                                      const std::vector<RespValue> &args,
-                                      ClientConnection &conn) {
-  if (!validateCommandArgs(cmd, args)) {
-    return {RespError("Invalid args")};
-  }
-  return std::visit(
-      [&](auto &cmd) -> std::vector<RespValue> {
-        return cmd.execute(args, conn);
-      },
-      cmd);
-}
-
-std::vector<RespValue> executeCommand(Command &cmd,
-                                      const std::vector<RespValue> &args,
-                                      ServerConnection &conn) {
-  if (!validateCommandArgs(cmd, args)) {
-    return {RespError("Invalid args")};
-  }
-  return std::visit(
-      [&](auto &cmd_var) -> std::vector<RespValue> {
-        using T = std::decay_t<decltype(cmd_var)>;
-        if constexpr (CommandFor<T, ServerConnection>) {
-          return cmd_var.execute(args, conn);
-        } else {
-          throw std::logic_error(std::string("Command '") +
-                                 std::string(T::name) +
-                                 "' is not valid for server connection");
-        }
-      },
-      cmd);
-}
 
 bool isWriteCommand(const Command &cmd) {
   return std::visit([](const auto &command) { return command.is_write; }, cmd);

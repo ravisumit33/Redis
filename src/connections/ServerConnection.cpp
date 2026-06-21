@@ -1,6 +1,6 @@
 #include "connections/ServerConnection.hpp"
 #include "AppContext.hpp"
-#include "Command.hpp"
+#include "CommandExecutor.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "RespTypeParser.hpp"
@@ -21,7 +21,7 @@
 #include <variant>
 #include <vector>
 
-void ServerConnection::sendCommand(std::vector<RespValue> args) {
+void ServerConnection::sendCommand(std::vector<RespValue> args) const {
   RespArray array;
   for (auto &resp_val : args) {
     array.add(std::move(resp_val));
@@ -84,16 +84,17 @@ void ServerConnection::configureRepl() {
 }
 
 void ServerConnection::processBacklogCommands(
-    std::istringstream &input_stream) {
+    std::istringstream &input_stream) const {
   const std::streampos pos = input_stream.tellg();
   const std::size_t total_bytes_after_handshake =
       (pos != -1) ? (input_stream.str().size() - static_cast<std::size_t>(pos))
                   : 0;
   std::size_t bytes_recorded = 0;
+  auto ctx = makeExecContext();
 
   while (input_stream.peek() != std::char_traits<char>::eof()) {
     auto [command, args] = parseCommand(input_stream, getContext());
-    auto responses = executeCommand(command, args, *this);
+    auto responses = executeCommand(command, args, ctx);
     std::string resp;
     for (const auto &response : responses) {
       resp += response.serialize();
@@ -201,6 +202,7 @@ void ServerConnection::handleConnection() {
   std::cout << "Handshake done" << '\n';
 
   try {
+    auto ctx = makeExecContext();
     while (true) {
       const std::string data = SocketUtils::readFromSocket(getSocketFd());
       if (data.empty()) {
@@ -216,7 +218,7 @@ void ServerConnection::handleConnection() {
       std::size_t bytes_recorded = 0;
       while (socket_data.peek() != std::char_traits<char>::eof()) {
         auto [command, args] = parseCommand(socket_data, getContext());
-        auto responses = executeCommand(command, args, *this);
+        auto responses = executeCommand(command, args, ctx);
         std::string serialized_response;
         for (const auto &response : responses) {
           serialized_response += response.serialize();

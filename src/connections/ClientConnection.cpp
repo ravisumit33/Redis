@@ -1,6 +1,6 @@
 #include "connections/ClientConnection.hpp"
 #include "AppContext.hpp"
-#include "Command.hpp"
+#include "CommandExecutor.hpp"
 #include "ReplicationState.hpp"
 #include "RespType.hpp"
 #include "commands/ReplConfCommand.hpp"
@@ -28,7 +28,7 @@ void ClientConnection::addAsSlave() {
   m_is_slave = true;
 }
 
-void ClientConnection::handleSubscribedModeError(const Command &command) {
+void ClientConnection::handleSubscribedModeError(const Command &command) const {
   std::string command_type(getCommandName(command));
   std::ranges::transform(command_type, command_type.begin(),
                          [](unsigned char chr) { return std::tolower(chr); });
@@ -56,13 +56,15 @@ void ClientConnection::checkAndRegisterSlave(
 void ClientConnection::processCommand(Command command,
                                       std::vector<RespValue> args,
                                       const std::string &raw_data) {
-  if (isInSubscribedMode() && !isSubscribedModeCommand(command)) {
+  auto ctx = makeExecContext();
+
+  if (ctx.subs().inSubscribedMode() && !isSubscribedModeCommand(command)) {
     handleSubscribedModeError(command);
     return;
   }
 
-  if (isInTransaction() && !isControlCommand(command)) {
-    queueCommand(command, std::move(args));
+  if (ctx.txn().inTransaction() && !isControlCommand(command)) {
+    ctx.txn().queue(command, std::move(args));
     const RespString resp("QUEUED");
     SocketUtils::writeToSocket(getSocketFd(), resp.serialize());
     return;
@@ -70,7 +72,7 @@ void ClientConnection::processCommand(Command command,
 
   checkAndRegisterSlave(command, args);
 
-  auto responses = executeCommand(command, args, *this);
+  auto responses = executeCommand(command, args, ctx);
   std::string resp;
   for (const auto &response : responses) {
     resp += response.serialize();
@@ -114,25 +116,4 @@ void ClientConnection::handleConnection() {
     std::cerr << "Client connection error [fd=" << getSocketFd()
               << "]: " << exp.what() << '\n';
   }
-}
-
-RespValue ClientConnection::executeTransaction() {
-  RespArray resp_array;
-  for (auto &[cmd, args] : m_queued_commands) {
-    auto result = executeCommand(cmd, args, *this);
-    for (auto &res : result) {
-      resp_array.add(std::move(res));
-    }
-  }
-  m_queued_commands.clear();
-  m_in_transaction = false;
-  return resp_array;
-}
-
-void ClientConnection::RedisSubscriber::onMessage(const std::string &msg) {
-  RespArray resp_array;
-  resp_array.add(RespBulkString("message"))
-      .add(RespBulkString(m_channel_name))
-      .add(RespBulkString(msg));
-  SocketUtils::writeToSocket(m_con.getSocketFd(), resp_array.serialize());
 }

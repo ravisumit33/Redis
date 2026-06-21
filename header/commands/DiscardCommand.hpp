@@ -1,10 +1,11 @@
 #pragma once
 
 #include "RespType.hpp"
+#include "connections/Capabilities.hpp"
 #include <string_view>
 #include <vector>
 
-class ClientConnection;
+class TransactionState;
 
 class DiscardCommand {
 public:
@@ -17,6 +18,14 @@ public:
     return args.empty();
   }
 
+  template <typename Ctx>
+    requires Transactional<Ctx>
   static std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                        ClientConnection &conn);
+                                        Ctx &ctx) {
+    return doExecute(args, ctx.txn());
+  }
+
+private:
+  static std::vector<RespValue> doExecute(const std::vector<RespValue> &args,
+                                          TransactionState &txn);
 };

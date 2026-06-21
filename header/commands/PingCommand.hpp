@@ -1,11 +1,9 @@
 #pragma once
 
 #include "RespType.hpp"
+#include "connections/Capabilities.hpp"
 #include <string_view>
 #include <vector>
-
-class ClientConnection;
-class ServerConnection;
 
 class PingCommand {
 public:
@@ -18,8 +16,16 @@ public:
     return args.empty();
   }
 
-  static std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                        ClientConnection &conn);
-  static std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                        ServerConnection &conn);
+  template <typename Ctx>
+  static std::vector<RespValue> execute(const std::vector<RespValue> & /*args*/,
+                                        Ctx &ctx) {
+    bool subscribed_mode = false;
+    if constexpr (PubSub<Ctx>) {
+      subscribed_mode = ctx.subs().inSubscribedMode();
+    }
+    return doExecute(subscribed_mode);
+  }
+
+private:
+  static std::vector<RespValue> doExecute(bool subscribed_mode);
 };

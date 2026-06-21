@@ -15,9 +15,9 @@ public:
     return args.size() == 1;
   }
 
-  template <typename Conn>
+  template <typename Ctx>
   static std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                        Conn & /*conn*/) {
+                                        Ctx & /*ctx*/) {
     return doExecute(args);
   }
 

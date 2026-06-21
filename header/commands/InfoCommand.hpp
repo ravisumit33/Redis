@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RespType.hpp"
+#include "connections/Capabilities.hpp"
 #include <string_view>
 #include <vector>
 
@@ -18,11 +19,11 @@ public:
     return args.size() == 1;
   }
 
-  template <typename Conn>
+  template <typename Ctx>
+    requires Configurable<Ctx> && Replicating<Ctx>
   static std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                        Conn &conn) {
-    return doExecute(args, conn.getContext().getConfig(),
-                     conn.getContext().getReplicationManager());
+                                        Ctx &ctx) {
+    return doExecute(args, ctx.config(), ctx.replication());
   }
 
 private:

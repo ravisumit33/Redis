@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RespType.hpp"
+#include "connections/Capabilities.hpp"
 #include <string_view>
 #include <vector>
 
@@ -18,10 +19,11 @@ public:
     return (nargs >= 3) && (nargs % 2 == 1);
   }
 
-  template <typename Conn>
+  template <typename Ctx>
+    requires HasStore<Ctx>
   static std::vector<RespValue> execute(const std::vector<RespValue> &args,
-                                        Conn &conn) {
-    return doExecute(args, conn.getContext().getRedisStore());
+                                        Ctx &ctx) {
+    return doExecute(args, ctx.store());
   }
 
 private:
