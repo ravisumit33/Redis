@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CommandFlags.hpp"
 #include "RespType.hpp"
 #include <string_view>
 #include <vector>
@@ -7,9 +8,7 @@
 class EchoCommand {
 public:
   static constexpr std::string_view name = "ECHO";
-  static constexpr bool is_write = false;
-  static constexpr bool is_control = false;
-  static constexpr bool is_subscribed_mode = false;
+  static constexpr CmdFlags flags = CmdFlags::None;
 
   static bool validateArgs(const std::vector<RespValue> &args) {
     return args.size() == 1;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CommandFlags.hpp"
 #include "RespType.hpp"
 #include "connections/Capabilities.hpp"
 #include <string_view>
@@ -11,9 +12,7 @@ class RedisChannelManager;
 class SubscribeCommand {
 public:
   static constexpr std::string_view name = "SUBSCRIBE";
-  static constexpr bool is_write = false;
-  static constexpr bool is_control = false;
-  static constexpr bool is_subscribed_mode = true;
+  static constexpr CmdFlags flags = CmdFlags::SubscribedMode;
 
   static bool validateArgs(const std::vector<RespValue> &args) {
     return args.size() == 1;

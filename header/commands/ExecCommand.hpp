@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CommandFlags.hpp"
 #include "RespType.hpp"
 #include "connections/Capabilities.hpp"
 #include <string_view>
@@ -8,9 +9,7 @@
 class ExecCommand {
 public:
   static constexpr std::string_view name = "EXEC";
-  static constexpr bool is_write = false;
-  static constexpr bool is_control = true;
-  static constexpr bool is_subscribed_mode = false;
+  static constexpr CmdFlags flags = CmdFlags::Control;
 
   static bool validateArgs(const std::vector<RespValue> &args) {
     return args.empty();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CommandFlags.hpp"
 #include "RespType.hpp"
 #include "connections/Capabilities.hpp"
 #include <string_view>
@@ -10,9 +11,7 @@ class RedisStore;
 class XaddCommand {
 public:
   static constexpr std::string_view name = "XADD";
-  static constexpr bool is_write = true;
-  static constexpr bool is_control = false;
-  static constexpr bool is_subscribed_mode = false;
+  static constexpr CmdFlags flags = CmdFlags::Write;
 
   static bool validateArgs(const std::vector<RespValue> &args) {
     const std::size_t nargs = args.size();

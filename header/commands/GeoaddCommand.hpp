@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CommandFlags.hpp"
 #include "RespType.hpp"
 #include <string_view>
 #include <vector>
@@ -7,9 +8,7 @@
 class GeoaddCommand {
 public:
   static constexpr std::string_view name = "GEOADD";
-  static constexpr bool is_write = true;
-  static constexpr bool is_control = false;
-  static constexpr bool is_subscribed_mode = false;
+  static constexpr CmdFlags flags = CmdFlags::Write;
 
   static bool validateArgs(const std::vector<RespValue> &args) {
     return args.size() == 4;

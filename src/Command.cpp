@@ -1,5 +1,6 @@
 #include "Command.hpp"
 #include "AppContext.hpp"
+#include "CommandFlags.hpp"
 #include "RespType.hpp"
 #include "RespTypeParser.hpp"
 #include "commands/BlpopCommand.hpp"
@@ -44,18 +45,22 @@
 #include <variant>
 #include <vector>
 
+namespace {
+CmdFlags commandFlags(const Command &cmd) {
+  return std::visit([](const auto &command) { return command.flags; }, cmd);
+}
+} // namespace
+
 bool isWriteCommand(const Command &cmd) {
-  return std::visit([](const auto &command) { return command.is_write; }, cmd);
+  return hasFlag(commandFlags(cmd), CmdFlags::Write);
 }
 
 bool isControlCommand(const Command &cmd) {
-  return std::visit([](const auto &command) { return command.is_control; },
-                    cmd);
+  return hasFlag(commandFlags(cmd), CmdFlags::Control);
 }
 
 bool isSubscribedModeCommand(const Command &cmd) {
-  return std::visit(
-      [](const auto &command) { return command.is_subscribed_mode; }, cmd);
+  return hasFlag(commandFlags(cmd), CmdFlags::SubscribedMode);
 }
 
 std::string_view getCommandName(const Command &cmd) {
